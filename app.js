@@ -1,10 +1,10 @@
 'use strict';
-/* Кабинет мастера ПМ: прототип 0.4.
+/* Кабинет мастера ПМ: прототип 0.5.
    Учёт и управление бизнесом мастера. Всё хранится только в этом браузере (localStorage).
    Серверов и ИИ нет: «диктовка» разбирает текст правилами прямо на телефоне. */
 (() => {
   const KEY = 'pmu_cabinet_v1';
-  const VERSION_LABEL = 'Кабинет мастера, прототип 0.4';
+  const VERSION_LABEL = 'Кабинет мастера, прототип 0.5';
 
   // Что бесплатно, а что нет. Меняется в одном месте.
   const PLAN = {
@@ -115,11 +115,22 @@
     { key: 't2', group: 'Татуировка', name: 'Сеанс (час работы)', mins: 60, price: 100, kw: ['сеанс'], drops: 0, on: false },
   ];
 
+  // Набор материалов для быстрого старта (цены примерные, их нужно заменить своими)
+  const SUPPLY_SET = [
+    { key: 'cart', name: 'Картриджи', qty: 20, unit: 'шт', price: 160, on: true },
+    { key: 'glove', name: 'Перчатки', qty: 100, unit: 'шт', price: 25, on: true },
+    { key: 'anes', name: 'Анестезия', qty: 30, unit: 'порций', price: 45, on: true },
+    { key: 'wipe', name: 'Салфетки и пелёнки', qty: 50, unit: 'наборов', price: 60, on: true },
+    { key: 'brush', name: 'Микробраши', qty: 50, unit: 'шт', price: 40, on: false },
+    { key: 'film', name: 'Защитная плёнка', qty: 100, unit: 'шт', price: 20, on: false },
+    { key: 'cap', name: 'Колпачки для пигмента', qty: 500, unit: 'шт', price: 15, on: false },
+  ];
+
   const INTROS = {
     home: { ico: 'home', title: 'Главная', text: 'Здесь главное на сегодня: сколько вы заработали за месяц, какие задачи на день и кому пора написать.', when: 'Откройте утром и вечером: две минуты, и вы в курсе всего.' },
-    clients: { ico: 'users', title: 'Клиенты', text: 'Карточки клиентов с историей процедур и рецептами, а также напоминания и готовые сообщения. Перед коррекцией откройте карточку и подставьте прошлый рецепт.', when: 'Перед приходом клиента и после процедуры.' },
+    clients: { ico: 'users', title: 'Клиенты', text: 'Карточки клиентов с рецептами и вкладка «Процедуры»: вся история с фильтрами, отмены и неявки. Здесь же напоминания и готовые сообщения. Перед коррекцией откройте карточку и подставьте прошлый рецепт.', when: 'Перед приходом клиента и после процедуры.' },
     board: { ico: 'board', title: 'Задачи', text: 'Ваш планер, как в Trello. Колонки можно переименовать, сворачивать и разворачивать, в карточке есть чек-лист и срок.', when: 'Утром, чтобы спланировать день.' },
-    money: { ico: 'coin', title: 'Деньги', text: 'Цена процедуры, отчёт за месяц, а также услуги, материалы и ваш набор пигментов: из них считается, сколько остаётся с каждой процедуры.', when: 'Когда меняете прайс, закупаете материалы или подводите итоги.', warn: 'Без услуг и материалов расчёты будут пустыми. Начните с настройки на главной.' },
+    money: { ico: 'coin', title: 'Деньги', text: 'Цена процедуры, отчёт за месяц, «Что если», прайс-карточка для Instagram, а также услуги, материалы и ваш набор пигментов: из них считается, сколько остаётся с каждой процедуры.', when: 'Когда меняете прайс, закупаете материалы или подводите итоги.', warn: 'Без услуг и материалов расчёты будут пустыми. Начните с настройки на главной.' },
     learn: { ico: 'book', title: 'Знания', text: 'Короткие памятки, таблицы и видеоуроки по зонам и технике.', when: 'Перед сложной работой или когда нужно освежить порядок действий.', warn: 'Часть материалов открыта только в PRO.' },
   };
 
@@ -180,10 +191,15 @@
     try { localStorage.setItem(KEY, JSON.stringify(S)); storageOk = true; return true; } catch (e) { storageOk = false; return false; }
   };
 
+  // в деньгах, клиентах и напоминаниях учитываются только состоявшиеся процедуры; отмены и неявки живут отдельно
+  const procs = () => S.procedures.filter((p) => !p.status || p.status === 'done');
+  const STATUS = { done: 'Состоялась', cancel: 'Отмена', noshow: 'Неявка' };
+
   let page = 'home';     // home | clients | board | money | learn | profile | bg
   let sub = null;        // price | supplies | services | kit | report (внутри «Деньги»), msgs (внутри «Клиенты»)
   let learnFilter = 'all';
   let clientQuery = '';
+  let clientsTab = 'people'; let procPeriod = 'all'; let procZone = 'all'; let procQuery = '';
   let clientFilter = 'all';
   let kitQuery = '';
   let kitBrand = 'all';
@@ -220,7 +236,10 @@
   const pigById = (id) => S.pigments.find((p) => p.id === id);
   const dropCost = (p) => (num(p.ml) > 0 && num(S.settings.dropsPerMl) > 0 ? num(p.price) / (num(p.ml) * num(S.settings.dropsPerMl)) : 0);
   const avgDropCost = () => { const a = S.pigments.map(dropCost).filter((x) => x > 0); return a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0; };
-  const usageCost = (z) => Object.entries(z.usage || {}).reduce((sum, [id, q]) => { const s = supplyById(id); return sum + (s ? num(q) * unitCost(s) : 0); }, 0);
+  const usageCostOf = (map) => Object.entries(map || {}).reduce((sum, [id, q]) => { const s = supplyById(id); return sum + (s ? num(q) * unitCost(s) : 0); }, 0);
+  const usageCost = (z) => usageCostOf(z.usage);
+  // сроки напоминаний: свои у услуги, иначе общие из настроек
+  const ruleDays = (zoneId, key) => { const z = S.zones.find((x) => x.id === zoneId); const v = z && z[key] !== undefined && z[key] !== null && z[key] !== '' ? num(z[key]) : 0; return v > 0 ? v : num(S.settings[key]); };
   const zoneSupplyCost = (z) => usageCost(z) + num(z.drops) * avgDropCost();
   // пигмент вне набора или без цены считается по средней цене капли в наборе
   const rowDropCost = (r) => { const p = pigById(r.pid); const dc = p ? dropCost(p) : 0; return dc > 0 ? dc : avgDropCost(); };
@@ -243,9 +262,9 @@
   }
 
   // стоимость конкретной процедуры: материалы по услуге плюс пигмент по рецепту (или оценка)
-  function procCosts(z, price, recipe) {
+  function procCosts(z, price, recipe, usageMap) {
     const st = S.settings;
-    const usage = z ? usageCost(z) : 0;
+    const usage = z ? usageCostOf(usageMap || z.usage) : 0;
     const hasRecipe = recipe && recipe.length;
     const pigment = hasRecipe ? recipeCost(recipe) : (z ? num(z.drops) * avgDropCost() : 0);
     const tax = price * taxRate();
@@ -256,16 +275,17 @@
   const procNet = (p) => num(p.price) - num(p.costTax) - num(p.costSupplies) - num(p.costRent);
   const monthKey = (d = new Date()) => dstr(d).slice(0, 7);
   const prevMonthKey = (ym) => { const [y, m] = ym.split('-').map(Number); return monthKey(new Date(y, m - 2, 1)); };
-  const monthName = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }); };
+  const monthName = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }).replace(/\s*г\.?$/, ''); };
 
   function monthData(ym) {
-    const list = S.procedures.filter((p) => p.date.startsWith(ym));
+    const list = procs().filter((p) => p.date.startsWith(ym));
+    const bad = S.procedures.filter((p) => p.date.startsWith(ym) && p.status && p.status !== 'done');
     const gross = list.reduce((s, p) => s + num(p.price), 0);
     const left = list.reduce((s, p) => s + procNet(p), 0);
     const tax = list.reduce((s, p) => s + num(p.costTax), 0);
     const sup = list.reduce((s, p) => s + num(p.costSupplies) + num(p.costRent), 0);
     const fixed = fixedMonthly();
-    return { list, count: list.length, gross, left, tax, sup, fixed, net: left - fixed, avg: list.length ? gross / list.length : 0, cover: fixed > 0 ? Math.min(1, Math.max(0, left / fixed)) : 1 };
+    return { list, lostN: bad.length, lost: bad.reduce((a, p) => a + num(p.price), 0), count: list.length, gross, left, tax, sup, fixed, net: left - fixed, avg: list.length ? gross / list.length : 0, cover: fixed > 0 ? Math.min(1, Math.max(0, left / fixed)) : 1 };
   }
 
   function byZone(list) {
@@ -295,7 +315,7 @@
   // клиенты: сводка по записям
   function clientsAgg() {
     const map = new Map();
-    S.procedures.forEach((p) => {
+    procs().forEach((p) => {
       const k = clientKey(p.client);
       if (!map.has(k)) map.set(k, { key: k, name: p.client, list: [] });
       map.get(k).list.push(p);
@@ -311,7 +331,7 @@
 
   function retention() {
     const byC = new Map();
-    S.procedures.forEach((p) => { const k = clientKey(p.client); if (!byC.has(k)) byC.set(k, []); byC.get(k).push(p); });
+    procs().forEach((p) => { const k = clientKey(p.client); if (!byC.has(k)) byC.set(k, []); byC.get(k).push(p); });
     let total = 0; let back = 0;
     byC.forEach((list) => {
       const prim = list.filter((p) => p.visit === 'Первичка').sort((a, b) => a.date.localeCompare(b.date))[0];
@@ -334,15 +354,17 @@
     const t = today();
     const res = [];
     const last = new Map();
-    S.procedures.forEach((p) => { const k = clientKey(p.client); if (!last.has(k) || last.get(k).date <= p.date) last.set(k, p); });
-    S.procedures.forEach((p) => {
+    procs().forEach((p) => { const k = clientKey(p.client); if (!last.has(k) || last.get(k).date <= p.date) last.set(k, p); });
+    procs().forEach((p) => {
       const d = daysBetween(p.date, t);
-      if (d >= num(st.careDays) && d <= num(st.careDays) + 3 && last.get(clientKey(p.client)).id === p.id) res.push({ p, d, kind: 'care', key: p.id + ':care' });
+      const cd = ruleDays(p.zoneId, 'careDays');
+      if (d >= cd && d <= cd + 3 && last.get(clientKey(p.client)).id === p.id) res.push({ p, d, kind: 'care', key: p.id + ':care' });
     });
     last.forEach((p) => {
       const d = daysBetween(p.date, t);
-      if (p.visit === 'Первичка' && d >= num(st.corrDays) && d < num(st.refreshDays)) res.push({ p, d, kind: 'corr', key: p.id + ':corr' });
-      if (d >= num(st.refreshDays)) res.push({ p, d, kind: 'refresh', key: p.id + ':refresh' });
+      const corr = ruleDays(p.zoneId, 'corrDays'); const refr = ruleDays(p.zoneId, 'refreshDays');
+      if (p.visit === 'Первичка' && d >= corr && d < refr) res.push({ p, d, kind: 'corr', key: p.id + ':corr' });
+      if (d >= refr) res.push({ p, d, kind: 'refresh', key: p.id + ':refresh' });
       else if (p.visit !== 'Первичка' && d >= num(st.winbackDays)) res.push({ p, d, kind: 'winback', key: p.id + ':winback' });
     });
     const order = { corr: 0, refresh: 1, winback: 2, care: 3 };
@@ -421,18 +443,19 @@
     }
     if (fc) out.push({ p: 2, tone: fc.projNet >= 0 ? 'ok' : 'warn', ico: 'trend', title: 'К концу месяца', text: `При таком темпе вы заработаете чистыми около ${fmt(fc.projNet)}.` });
 
-    const zs = byZone(S.procedures).filter((z) => z.perHour != null).sort((x, y) => y.perHour - x.perHour);
+    const zs = byZone(procs()).filter((z) => z.perHour != null).sort((x, y) => y.perHour - x.perHour);
     if (zs.length >= 2) {
       out.push({ p: 2, tone: 'info', ico: 'clock', title: 'Какой час оплачивается лучше', text: `${esc(zs[0].name)}: ${fmt(zs[0].perHour)} за час. ${esc(zs[zs.length - 1].name)}: ${fmt(zs[zs.length - 1].perHour)} за час.` });
-    } else if (S.procedures.length >= 3 && S.zones.some((z) => !num(z.hours))) {
+    } else if (procs().length >= 3 && S.zones.some((z) => !num(z.hours))) {
       out.push({ p: 3, tone: 'info', ico: 'clock', title: 'Сколько стоит ваш час', text: 'Укажите, сколько часов занимает каждая услуга, и приложение покажет, какая оплачивается лучше.', act: { label: 'Указать часы', page: 'money', sub: 'services' } });
     }
 
     const due = dueList();
     if (due.length) {
-      const avg = S.procedures.length ? S.procedures.reduce((s, p) => s + num(p.price), 0) / S.procedures.length : 0;
+      const avg = procs().length ? procs().reduce((s, p) => s + num(p.price), 0) / procs().length : 0;
       out.push({ p: 2, tone: 'info', ico: 'users', title: `Пора написать: ${due.length} ${plural(due.length, 'клиенту', 'клиентам', 'клиентам')}`, text: avg > 0 ? `Если запишется хотя бы половина, это около ${fmt(Math.round(due.length / 2) * avg)}.` : 'Напомните о коррекции или обновлении.' });
     }
+    if (m.lostN > 0) out.push({ p: 2, tone: 'warn', ico: 'clock', title: `Неявки и отмены: ${m.lostN}`, text: `За месяц потеряно около ${fmt(m.lost)}. Напомните клиентам за день до процедуры.` });
     if (m.tax > 0) out.push({ p: 3, tone: 'info', ico: 'coin', title: 'Отложить на налог', text: `За этот месяц набежало ${fmt(m.tax)}.` });
     const ret = retention();
     if (ret) out.push({ p: 3, tone: 'info', ico: 'users', title: 'Возвращаются на коррекцию', text: `${Math.round(ret.rate * 100)}% новых клиентов (${ret.back} из ${ret.total}).` });
@@ -529,7 +552,7 @@
   function render(enter) {
     let main;
     if (sub) {
-      const v = { price: viewPrice, supplies: viewSupplies, services: viewServices, kit: viewKit, report: viewReport, msgs: viewMsgs }[sub];
+      const v = { price: viewPrice, supplies: viewSupplies, services: viewServices, kit: viewKit, report: viewReport, msgs: viewMsgs, whatif: viewWhatIf }[sub];
       main = v();
     } else {
       main = { home: viewHome, clients: viewClients, board: viewBoard, money: viewMoney, learn: viewLearn, profile: viewProfile, bg: viewBg }[page]();
@@ -570,6 +593,7 @@
     services: ['Услуги', 'Цены и время работы'],
     kit: ['Мой набор', 'Пигменты, которыми вы работаете'],
     report: ['Отчёт за месяц', 'Деньги, услуги, клиенты'],
+    whatif: ['Что если', 'Цена, скидка, клиенты'],
     msgs: ['Сообщения клиентам', 'Напоминания, шаблоны, подписи'],
   };
 
@@ -690,11 +714,13 @@
       </div>
       <div class="card menu-list">
         <button class="menu-item" data-a="go" data-page="money" data-sub="report"><div class="ic blue">${ico('chart')}</div><div>Отчёт за месяц<small>Деньги, услуги, клиенты и налог</small></div>${ico('chev')}</button>
+        <button class="menu-item" data-a="go" data-page="money" data-sub="whatif"><div class="ic violet">${ico('trend')}</div><div>Что если<small>Цена, скидка и число клиентов</small></div>${ico('chev')}</button>
+        <button class="menu-item" data-a="pricecard"><div class="ic pink">${ico('star')}</div><div>Прайс-карточка<small>Картинка с ценами для Instagram</small></div>${ico('chev')}</button>
         <button class="menu-item" data-a="go" data-page="money" data-sub="services"><div class="ic">${ico('list')}</div><div>Услуги<small>Цены и время работы</small></div>${ico('chev')}</button>
         <button class="menu-item" data-a="go" data-page="money" data-sub="kit"><div class="ic">${ico('palette')}</div><div>Мой набор пигментов<small>${S.pigments.length ? S.pigments.length + ' ' + plural(S.pigments.length, 'пигмент', 'пигмента', 'пигментов') : 'Бренды, цвета, цена флакона'}</small></div>${ico('chev')}</button>
       </div>
       <div class="stack"><span class="h2">Скоро</span>
-        <div class="chips wrap"><span class="chip soon">Расходы и налоги</span><span class="chip soon">Цели и план</span><span class="chip soon">Что если</span></div></div>`;
+        <div class="chips wrap"><span class="chip soon">Расходы и налоги</span><span class="chip soon">Цели и план</span></div></div>`;
   }
 
   // --- Цена процедуры
@@ -758,17 +784,22 @@
 
   // --- Материалы
   function viewSupplies() {
-    const sup = S.supplies.map((s) => `<div class="card tap row" data-a="supply" data-id="${esc(s.id)}">
-      <div><div class="item-title">${esc(s.name)}</div><div class="small muted">${esc(s.packQty)} ${esc(s.unit || 'шт')} за ${fmt(num(s.packPrice))}</div></div>
-      <div style="text-align:right"><div class="num">${fmt2(unitCost(s))}</div><div class="tiny muted">за единицу</div></div></div>`).join('');
+    const sup = S.supplies.map((s) => {
+      const used = S.zones.filter((z) => num((z.usage || {})[s.id]) > 0).length;
+      return `<div class="card tap row" data-a="supply" data-id="${esc(s.id)}">
+        <div><div class="item-title">${esc(s.name)}</div><div class="small muted">${esc(s.packQty)} ${esc(s.unit || 'шт')} за ${fmt(num(s.packPrice))} · ${used ? 'используется в услугах: ' + used : 'пока не используется'}</div></div>
+        <div style="text-align:right"><div class="num">${fmt2(unitCost(s))}</div><div class="tiny muted">за единицу</div></div></div>`;
+    }).join('');
     const zones = S.zones.map((z) => {
       const used = Object.entries(z.usage || {}).filter(([id, q]) => supplyById(id) && num(q) > 0);
       return `<div class="card tap stack" data-a="zone" data-id="${esc(z.id)}">
         <div class="row"><div class="item-title">${esc(z.name)}</div><span class="num">${fmt2(zoneSupplyCost(z))}</span></div>
-        <p class="small muted">${used.length ? used.map(([id, q]) => `${esc(supplyById(id).name)} ×${esc(q)}`).join(', ') : 'Расход не указан'}${num(z.drops) > 0 ? ` · пигмент ${esc(z.drops)} кап.` : ''}</p></div>`;
+        <p class="small muted">${used.length ? used.map(([id, q]) => `${esc(supplyById(id).name)} ×${esc(q)}`).join(', ') : 'Расход не указан: нажмите и выберите материалы'}${num(z.drops) > 0 ? ` · пигмент ${esc(z.drops)} кап.` : ''}</p></div>`;
     }).join('');
-    return `<div class="row"><span class="h2">Что вы покупаете</span><button class="link" data-a="supply" data-id="">+ Добавить</button></div>
-      <div class="list">${sup || `<div class="card empty">${ico('box')}<b>Пока пусто</b><span>Добавьте картриджи, перчатки, анестезию, расходники.</span></div>`}</div>
+    return `<div class="note">${ico('info')}<span>Укажите цену упаковки и сколько в ней штук: цена единицы посчитается сама. Какие материалы уходят на процедуру, выбирается в самой услуге.</span></div>
+      <div class="row"><span class="h2">Что вы покупаете</span><button class="link" data-a="supply" data-id="">+ Свой материал</button></div>
+      <div class="list">${sup || `<div class="card empty">${ico('box')}<b>Пока пусто</b><span>Добавьте набор материалов с примерными ценами и замените их своими.</span></div>`}</div>
+      <button class="btn ${S.supplies.length ? '' : 'primary'}" data-a="supset">${ico('spark')}Добавить из набора материалов</button>
       <div class="row"><span class="h2">Сколько уходит на процедуру</span><button class="link" data-a="zone" data-id="">+ Услуга</button></div>
       <div class="list">${zones || `<div class="card empty">${ico('list')}<b>Нет услуг</b><span>Добавьте услуги и отметьте, что на них тратится.</span></div>`}</div>
       ${S.supplies.length === 0 && S.zones.length === 0 ? `<button class="btn" data-a="sample">Заполнить примером</button>` : ''}`;
@@ -840,6 +871,7 @@
         <div class="h2">Клиенты</div>
         <div class="sum"><div class="row"><span class="muted">Средний чек</span><span class="num">${fmt(m.avg)}</span></div>
         ${ret ? `<div class="row"><span class="muted">Вернулись на коррекцию</span><span class="num">${Math.round(ret.rate * 100)}%</span></div>` : ''}
+        ${m.lostN ? `<div class="row"><span class="muted">Неявки и отмены</span><span class="num bad">${m.lostN} · −${fmt(m.lost)}</span></div>` : ''}
         <div class="row"><span class="muted">Пора написать</span><span class="num">${followups().length}</span></div></div>
       </div>
       ${m.tax > 0 ? `<div class="note">${ico('coin')}<span>Отложите на налог: <b>${fmt(m.tax)}</b>.</span></div>` : ''}`;
@@ -908,6 +940,10 @@
   }
   function viewClients() {
     if (proLocked()) return lockedBlock('Клиенты', 'История процедур, рецепты и напоминания о коррекции доступны в PRO.');
+    const tabs = `<div class="seg"><button class="${clientsTab === 'people' ? 'on' : ''}" data-a="clTab" data-id="people">Клиенты</button><button class="${clientsTab === 'procs' ? 'on' : ''}" data-a="clTab" data-id="procs">Процедуры</button></div>`;
+    return tabs + (clientsTab === 'procs' ? viewProcs() : viewPeople());
+  }
+  function viewPeople() {
     const all = clientsAgg();
     const dueN = new Set(dueList().map((x) => clientKey(x.p.client))).size;
     const newN = all.filter((c) => daysBetween(c.first, today()) <= 30).length;
@@ -921,6 +957,151 @@
       <div class="seg scroll">${[['all', 'Все'], ['recent', 'Недавние'], ['new', 'Новые'], ['due', 'Пора написать']].map(([k, l]) => `<button class="${clientFilter === k ? 'on' : ''}" data-a="cfilter" data-id="${k}">${l}</button>`).join('')}</div>
       <div class="search">${ico('search')}<input class="input" id="clientSearch" type="search" placeholder="Имя, ник или пометка" value="${esc(clientQuery)}" data-in="search"></div>
       <div id="clientList" class="list">${clientCards()}</div>`;
+  }
+
+  // --- Процедуры: история списком, фильтры, неявки и отмены
+  function procRows() {
+    const q = clientKey(procQuery); const ym = monthKey(); const prev = prevMonthKey(ym);
+    let list = S.procedures.slice().sort((a, b) => b.date.localeCompare(a.date));
+    if (procPeriod === 'month') list = list.filter((p) => p.date.startsWith(ym));
+    if (procPeriod === 'prev') list = list.filter((p) => p.date.startsWith(prev));
+    if (procZone !== 'all') list = list.filter((p) => (p.zoneId || p.zoneName) === procZone);
+    if (q) list = list.filter((p) => clientKey(p.client).includes(q));
+    if (!list.length) return `<div class="card empty">${ico('list')}<b>${S.procedures.length ? 'Ничего не нашли' : 'Процедур пока нет'}</b><span>${S.procedures.length ? 'Измените период, услугу или поиск.' : 'Добавьте первую процедуру кнопкой справа внизу.'}</span></div>`;
+    const done = list.filter((p) => !p.status || p.status === 'done');
+    const sumNet = done.reduce((a, p) => a + procNet(p), 0); const lost = list.filter((x) => x.status && x.status !== 'done').reduce((a, p) => a + num(p.price), 0);
+    let out = `<div class="grid2" style="grid-template-columns:repeat(3,1fr)">
+        <div class="card stat" style="grid-template-columns:1fr;gap:6px;padding:12px"><div class="v">${done.length}</div><div class="l">Процедур</div></div>
+        <div class="card stat" style="grid-template-columns:1fr;gap:6px;padding:12px"><div class="v">${nf0.format(sumNet)}</div><div class="l">Чистыми, ${esc(sym())}</div></div>
+        <div class="card stat" style="grid-template-columns:1fr;gap:6px;padding:12px"><div class="v">${nf0.format(lost)}</div><div class="l">Потеряно, ${esc(sym())}</div></div></div>`;
+    let cur = '';
+    list.forEach((p) => {
+      const ymk = p.date.slice(0, 7);
+      if (ymk !== cur) { cur = ymk; const nm = monthName(ymk); out += `<div class="h2" style="margin-top:6px">${esc(nm.charAt(0).toUpperCase() + nm.slice(1))}</div>`; }
+      const bad = p.status && p.status !== 'done';
+      out += `<div class="card tap row" data-a="${bad ? 'lostEdit' : 'proc'}" data-id="${esc(p.id)}"><div><div class="item-title">${esc(p.client)}</div>
+        <div class="small muted">${fmtDate(p.date)} · ${esc(p.zoneName || 'Услуга')}${bad ? '' : ' · ' + esc(p.visit)}</div>${bad ? `<div style="margin-top:4px"><span class="tag warn">${esc(STATUS[p.status] || p.status)}</span></div>` : ''}</div>
+        <div style="text-align:right">${bad ? `<div class="num bad">−${fmt(num(p.price))}</div><div class="tiny muted">потеряно</div>` : `<div class="num good">+${fmt(procNet(p))}</div><div class="tiny muted">чек ${fmt(num(p.price))}</div>`}</div></div>`;
+    });
+    return out;
+  }
+  function viewProcs() {
+    const zoneOpts = [...new Map(S.procedures.map((p) => [p.zoneId || p.zoneName, p.zoneName || 'Услуга']))];
+    return `<div class="search">${ico('search')}<input class="input" id="procSearch" type="search" placeholder="Поиск по клиенту" value="${esc(procQuery)}" data-in="procq"></div>
+      <div class="seg">${[['all', 'Все'], ['month', 'Этот месяц'], ['prev', 'Прошлый']].map(([k, l]) => `<button class="${procPeriod === k ? 'on' : ''}" data-a="procPeriod" data-id="${k}">${l}</button>`).join('')}</div>
+      ${zoneOpts.length > 1 ? `<div class="chips"><button class="chip ${procZone === 'all' ? 'on' : ''}" data-a="procZone" data-id="all">Все услуги</button>${zoneOpts.map(([k, n]) => `<button class="chip ${procZone === k ? 'on' : ''}" data-a="procZone" data-id="${esc(k)}">${esc(n)}</button>`).join('')}</div>` : ''}
+      <button class="btn" data-a="lostNew">${ico('clock')}Не пришёл или отменил</button>
+      <div id="procList" class="list">${procRows()}</div>`;
+  }
+
+  // отмена или неявка: записывается отдельно и в деньги не попадает, но считается «потеряно»
+  let L = null;
+  function openLost(id) {
+    if (!S.zones.length) { toast('Сначала выберите услуги', 'neutral'); openServiceSet(); return; }
+    const b = id ? S.procedures.find((x) => x.id === id) : null;
+    L = b ? clone(b) : { id: '', client: '', zoneId: S.zones[0].id, date: today(), status: 'noshow', price: S.zones[0].price || '', touched: false };
+    if (b) L.touched = true;
+    modal(`${head(id ? 'Отмена или неявка' : 'Не пришёл или отменил')}
+      <p class="small muted">Эта запись не попадёт в выручку и отчёт, но покажет, сколько денег вы потеряли.</p>
+      <div class="field"><label for="lsClient">Имя, ник или пометка</label><input class="input" id="lsClient" list="clientNames" value="${esc(L.client)}" placeholder="Например: Аня рыжая" autocomplete="off" autofocus>
+        <datalist id="clientNames">${[...new Set(S.procedures.map((x) => x.client))].map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
+      <div class="field"><label for="lsZone">Услуга</label><select class="input" id="lsZone">${S.zones.map((z) => `<option value="${esc(z.id)}" ${z.id === L.zoneId ? 'selected' : ''}>${esc(z.name)}</option>`).join('')}</select></div>
+      <div class="seg"><button class="${L.status === 'noshow' ? 'on' : ''}" data-a="lsStatus" data-id="noshow">Неявка</button><button class="${L.status === 'cancel' ? 'on' : ''}" data-a="lsStatus" data-id="cancel">Отмена</button></div>
+      <div class="grid2"><div class="field"><label for="lsDate">Дата</label><input class="input" id="lsDate" type="date" value="${esc(L.date)}"></div>
+        <div class="field"><label for="lsPrice">Сколько потеряли</label><div class="suffix"><input class="input" id="lsPrice" type="number" inputmode="decimal" min="0" value="${esc(L.price)}" data-in="lsPrice"><span>${esc(sym())}</span></div></div></div>
+      <button class="btn primary" data-a="lsSave">Сохранить</button>
+      ${id ? `<button class="btn danger" data-a="lsDel" data-id="${esc(id)}">Удалить запись</button>` : ''}`);
+  }
+
+  // --- Что если: цена, скидка, число клиентов
+  let wi = { zoneId: '', price: null, disc: 0, clients: null };
+  function wiOut() {
+    const z = S.zones.find((x) => x.id === wi.zoneId); if (!z) return '';
+    const eff = num(wi.price) * (1 - num(wi.disc) / 100);
+    const rNew = zoneStats(z, eff); const rNow = zoneStats(z);
+    const fixed = fixedMonthly(); const nNow = rNow.N; const nNew = num(wi.clients);
+    const netNew = nNew * rNew.left - fixed; const netNow = nNow * rNow.left - fixed;
+    const d = netNew - netNow;
+    const needGoal = rNew.left > 0 && rNew.target > 0 ? Math.ceil((fixed + rNew.target) / rNew.left) : null;
+    const needZero = rNew.left > 0 && fixed > 0 ? Math.ceil(fixed / rNew.left) : null;
+    return `<div class="card stack"><div class="sum">
+        <div class="row"><span class="muted">Цена для клиента</span><span class="num">${fmt(eff)}</span></div>
+        <div class="row"><span class="muted">Остаётся с процедуры</span><span class="num ${rNew.left > 0 ? 'good' : 'bad'}">${fmt(rNew.left)}</span></div>
+        <div class="row small"><span class="muted">Сейчас</span><span>${fmt(rNow.left)}</span></div>
+        <div class="row total"><span>Чистыми за месяц (${nNew} ${plural(nNew, 'клиент', 'клиента', 'клиентов')})</span><span class="num ${netNew >= 0 ? 'good' : 'bad'}">${fmt(netNew)}</span></div>
+        <div class="row small"><span class="muted">Сейчас (${nNow} ${plural(nNow, 'клиент', 'клиента', 'клиентов')}, ваша цена)</span><span>${fmt(netNow)}</span></div></div>
+      <div class="note ${d >= 0 ? 'ok' : 'warn'}"><span>${Math.abs(d) < 0.5 ? 'Без изменений по сравнению с сейчас.' : d > 0 ? `Это на ${fmt(d)} в месяц лучше, чем сейчас.` : `Это на ${fmt(-d)} в месяц хуже, чем сейчас.`}</span></div>
+      ${needGoal ? `<p class="small">Чтобы оставлять ${fmt(rNew.target)} в месяц при такой цене, нужно <b>${needGoal}</b> ${plural(needGoal, 'клиент', 'клиента', 'клиентов')}.</p>` : ''}
+      ${needZero ? `<p class="small muted">Чтобы покрыть постоянные расходы: ${needZero} ${plural(needZero, 'клиент', 'клиента', 'клиентов')}.</p>` : ''}
+      <p class="tiny muted">Расчёт так, будто все клиенты пришли на эту услугу. Данные в приложении при этом не меняются.</p></div>`;
+  }
+  function viewWhatIf() {
+    if (!S.zones.length) return `<div class="card stack"><p>Чтобы пробовать «что если», нужна хотя бы одна услуга с ценой.</p><button class="btn primary" data-a="svcset">Выбрать услуги из набора</button></div>`;
+    let z = S.zones.find((x) => x.id === wi.zoneId);
+    if (!z) { z = S.zones[0]; wi = { zoneId: z.id, price: null, disc: 0, clients: null }; }
+    const base = num(z.price);
+    if (wi.price == null) wi.price = base;
+    if (wi.clients == null) wi.clients = Math.max(1, Math.round(num(S.settings.planClients)) || 1);
+    if (!base) return `<div class="card stack"><div class="field"><label for="wiZone">Услуга</label><select class="input" id="wiZone" data-in="wiZone">${S.zones.map((x) => `<option value="${esc(x.id)}" ${x.id === z.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div><div class="note warn">${ico('info')}<span>У этой услуги не указана цена. Откройте услугу и укажите её.</span></div></div>`;
+    const lo = Math.max(1, Math.round(base * 0.5)); const hi = Math.round(base * 2); const step = Math.max(1, Math.round(base / 50));
+    return `<div class="card stack">
+        <div class="field"><label for="wiZone">Услуга</label><select class="input" id="wiZone" data-in="wiZone">${S.zones.map((x) => `<option value="${esc(x.id)}" ${x.id === z.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="wiPrice">Цена: <b id="wiPriceV">${fmt(num(wi.price))}</b></label><input class="range" id="wiPrice" type="range" min="${lo}" max="${hi}" step="${step}" value="${esc(wi.price)}" data-in="wi"></div>
+        <div class="field"><label for="wiDisc">Скидка: <b id="wiDiscV">${esc(wi.disc)}%</b></label><input class="range" id="wiDisc" type="range" min="0" max="50" step="5" value="${esc(wi.disc)}" data-in="wi"></div>
+        <div class="field"><label for="wiN">Клиентов в месяц: <b id="wiNV">${esc(wi.clients)}</b></label><input class="range" id="wiN" type="range" min="1" max="60" step="1" value="${esc(wi.clients)}" data-in="wi"></div>
+      </div>
+      <div id="wiOut" class="stack">${wiOut()}</div>`;
+  }
+
+  // --- Прайс-карточка: картинка с ценами для Instagram, без фото
+  let pc = null;
+  function openPriceCard() {
+    const list = S.zones.filter((z) => num(z.price) > 0);
+    if (!list.length) { toast('Сначала укажите цены услуг', 'neutral'); return; }
+    pc = { sel: list.map((z) => z.id), title: S.settings.masterName.trim() ? 'Прайс · ' + S.settings.masterName.trim() : 'Прайс', foot: 'Запись в личных сообщениях' };
+    modal(`${head('Прайс-карточка')}
+      <p class="small muted">Картинка с ценами для Instagram или Telegram. Отметьте услуги и поправьте тексты.</p>
+      <div class="field"><label for="pcTitle">Заголовок</label><input class="input" id="pcTitle" value="${esc(pc.title)}" data-in="pcText" maxlength="40"></div>
+      <div class="stack">${list.map((z) => `<div class="svc-set pc-row"><button class="cb on" data-a="pcTog" data-id="${esc(z.id)}" aria-label="Выбрать">${ico('check')}</button><div><div class="item-title">${esc(z.name)}</div></div><span class="num">${fmt(num(z.price))}</span></div>`).join('')}</div>
+      <div class="field"><label for="pcFoot">Подпись внизу</label><input class="input" id="pcFoot" value="${esc(pc.foot)}" data-in="pcText" maxlength="60"></div>
+      <canvas id="pcCanvas" class="pc-canvas" width="1080" height="1350" aria-label="Предпросмотр прайс-карточки"></canvas>
+      <button class="btn primary" data-a="pcSave">${ico('upload')}Скачать картинку</button>
+      <button class="btn" data-a="pcShare">Поделиться</button>`);
+    drawPriceCard();
+  }
+  function drawPriceCard() {
+    const cv = $('#pcCanvas'); if (!cv || !pc) return;
+    const c = cv.getContext('2d'); const W = 1080; const H = 1350;
+    const preset = BGS.find((b) => b.id === S.bg.id) || BGS[0]; const v = preset.v; const light = preset.mode === 'light';
+    const ink = light ? '#0b2b27' : '#f2fbf9'; const muted = light ? 'rgba(11,43,39,.6)' : 'rgba(220,240,236,.62)'; const accent = light ? '#12776c' : '#aafcf2';
+    const g = c.createLinearGradient(0, 0, W * 0.6, H); g.addColorStop(0, v.bg); g.addColorStop(1, v.mid);
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const rg = c.createRadialGradient(W, H, 0, W, H, 900); rg.addColorStop(0, v.wbot); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = rg; c.fillRect(0, 0, W, H);
+    const fam = '-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    c.textBaseline = 'alphabetic';
+    c.fillStyle = ink; c.font = `700 80px ${fam}`;
+    let tsz = 80; const title = String(pc.title || 'Прайс');
+    while (c.measureText(title).width > W - 160 && tsz > 36) { tsz -= 4; c.font = `700 ${tsz}px ${fam}`; }
+    c.fillText(title, 80, 190);
+    c.fillStyle = accent; c.fillRect(80, 230, 140, 6);
+    const items = S.zones.filter((z) => pc.sel.includes(z.id) && num(z.price) > 0);
+    const top = 330; const bottom = 1180; const rowH = items.length ? Math.min(130, (bottom - top) / items.length) : 130;
+    let sz = Math.min(54, Math.floor(rowH * 0.46));
+    const fits = (size) => items.every((z) => { c.font = `600 ${size}px ${fam}`; const nw = c.measureText(z.name).width; c.font = `700 ${size}px ${fam}`; return nw + c.measureText(fmt(num(z.price))).width + 60 <= W - 160; });
+    while (sz > 26 && !fits(sz)) sz -= 2;
+    items.forEach((z, i) => {
+      const y = top + i * rowH + rowH * 0.62; const price = fmt(num(z.price));
+      c.font = `600 ${sz}px ${fam}`; c.fillStyle = ink; c.textAlign = 'left'; c.fillText(z.name, 80, y);
+      const nameW = c.measureText(z.name).width;
+      c.font = `700 ${sz}px ${fam}`; c.fillStyle = accent; c.textAlign = 'right'; c.fillText(price, W - 80, y);
+      const priceW = c.measureText(price).width;
+      c.strokeStyle = muted; c.lineWidth = 2; c.setLineDash([2, 10]); c.beginPath(); c.moveTo(80 + nameW + 20, y - 8); c.lineTo(W - 80 - priceW - 20, y - 8); c.stroke(); c.setLineDash([]);
+    });
+    c.textAlign = 'left'; c.fillStyle = muted; c.font = `500 40px ${fam}`;
+    let fsz = 40; const foot = String(pc.foot || '');
+    while (c.measureText(foot).width > W - 160 && fsz > 24) { fsz -= 2; c.font = `500 ${fsz}px ${fam}`; }
+    c.fillText(foot, 80, H - 90);
   }
 
   // --- Задачи (планер как в Trello): колонки друг под другом, каждую можно свернуть
@@ -1175,7 +1356,9 @@
     save(); closeModal(); render(); toast('Настройки сохранены');
   }
 
+  let spId = '';
   function openSupply(id) {
+    spId = id || '';
     const s = id ? supplyById(id) : { name: '', packPrice: '', packQty: '', unit: 'шт' };
     modal(`${head(id ? 'Материал' : 'Новый материал')}
       <div class="field"><label for="spName">Название</label><input class="input" id="spName" value="${esc(s.name)}" placeholder="Например: картриджи" autofocus></div>
@@ -1186,36 +1369,90 @@
       <button class="btn primary" data-a="saveSupply" data-id="${esc(id || '')}">Сохранить</button>
       ${id ? `<button class="btn danger" data-a="delSupply" data-id="${esc(id)}">Удалить</button>` : ''}`);
   }
-  const spOut = (price, qty, unit) => (num(qty) > 0 ? `<span>Одна единица (${esc(unit || 'шт')}) стоит <b>${fmt2(num(price) / num(qty))}</b></span>` : '<span>Введите цену и количество в упаковке</span>');
+  // что изменится в услугах, если поменять цену этого материала
+  function spEffect(price, qty) {
+    const s = spId ? supplyById(spId) : null; if (!s) return '';
+    const diff = (num(qty) > 0 ? num(price) / num(qty) : 0) - unitCost(s);
+    if (Math.abs(diff) < 0.0005) return '';
+    const rows = S.zones.filter((z) => num((z.usage || {})[s.id]) > 0).map((z) => {
+      const left = zoneStats(z).left;
+      return `<div class="row small"><span>${esc(z.name)}</span><span>остаётся ${fmt(left - num(z.usage[s.id]) * diff)} <span class="muted">(было ${fmt(left)})</span></span></div>`;
+    });
+    return rows.length ? `<div class="stack" style="gap:6px;margin-top:8px"><span class="tiny muted">Что изменится в услугах</span>${rows.join('')}</div>` : '';
+  }
+  const spOut = (price, qty, unit) => `<div>${num(qty) > 0 ? `<span>Одна единица (${esc(unit || 'шт')}) стоит <b>${fmt2(num(price) / num(qty))}</b></span>` : '<span>Введите цену и количество в упаковке</span>'}${spEffect(price, qty)}</div>`;
 
+  let zDraft = null; let zNew = false;
   function openZone(id) {
     const z = id ? S.zones.find((x) => x.id === id) : { name: '', price: '', hours: '', drops: '', usage: {} };
     if (!z) return;
-    modal(`${head(id ? z.name : 'Новая услуга')}
-      <div class="field"><label for="zName">Название услуги</label><input class="input" id="zName" value="${esc(z.name)}" placeholder="Например: брови" autofocus></div>
+    zDraft = { id: id || '', name: z.name, price: z.price, hours: z.hours, drops: z.drops, usage: clone(z.usage || {}), careDays: z.careDays || '', corrDays: z.corrDays || '', refreshDays: z.refreshDays || '' };
+    zNew = false;
+    renderZone(true);
+  }
+  function readZoneFields() {
+    if (!zDraft || !$('#zName')) return;
+    zDraft.name = val('zName'); zDraft.price = val('zPrice'); zDraft.hours = val('zHours'); zDraft.drops = val('zDrops');
+    ['careDays', 'corrDays', 'refreshDays'].forEach((k) => { const el = $('#z_' + k); if (el) zDraft[k] = el.value; });
+    document.querySelectorAll('#modalRoot [data-zu]').forEach((el) => { zDraft.usage[el.dataset.zu] = el.value; });
+  }
+  function renderZone(first) {
+    const z = zDraft;
+    const old = $('#modalRoot .sheet'); const st = old ? old.scrollTop : 0;
+    const ids = Object.keys(z.usage).filter((id) => supplyById(id));
+    const free = S.supplies.filter((x) => !ids.includes(x.id));
+    const rows = ids.map((id) => { const m = supplyById(id); return `<div class="mat-row"><div><div class="item-title">${esc(m.name)}</div><div class="tiny muted">${fmt2(unitCost(m))} за ${esc(m.unit || 'шт')}</div></div>
+        <input class="input" type="number" inputmode="decimal" min="0" step="any" data-zu="${esc(id)}" data-in="zCalc" value="${esc(z.usage[id])}" aria-label="Расход: ${esc(m.name)}">
+        <span class="mat-sum" data-zsum="${esc(id)}"></span>
+        <button class="icon-btn" style="width:34px;height:34px" data-a="zMatDel" data-id="${esc(id)}" aria-label="Убрать материал">${ico('close')}</button></div>`; }).join('');
+    const newForm = zNew ? `<div class="card stack"><span class="h2">Новый материал</span>
+        <div class="field"><label for="nmName">Название</label><input class="input" id="nmName" placeholder="Например: микробраши"></div>
+        <div class="grid2"><div class="field"><label for="nmPrice">Цена упаковки</label><input class="input" id="nmPrice" type="number" inputmode="decimal" min="0"></div>
+          <div class="field"><label for="nmQty">Сколько в упаковке</label><input class="input" id="nmQty" type="number" inputmode="decimal" min="0"></div></div>
+        <div class="field"><label for="nmUnit">Единица (шт, мл, порций)</label><input class="input" id="nmUnit" value="шт"></div>
+        <div class="d-btns2"><button class="btn" data-a="zNewCancel">Отмена</button><button class="btn primary" data-a="zNewSave">Добавить</button></div></div>` : '';
+    modal(`${head(z.id ? (z.name || 'Услуга') : 'Новая услуга')}
+      <div class="field"><label for="zName">Название услуги</label><input class="input" id="zName" value="${esc(z.name)}" placeholder="Например: брови" data-in="zCalc" ${z.id ? '' : 'autofocus'}></div>
       <div class="grid2"><div class="field"><label for="zPrice">Цена для клиента</label><div class="suffix"><input class="input" id="zPrice" type="number" inputmode="decimal" min="0" value="${esc(z.price)}" data-in="zCalc"><span>${esc(sym())}</span></div></div>
         <div class="field"><label for="zHours">Часов на услугу</label><input class="input" id="zHours" type="number" inputmode="decimal" min="0" step="0.5" value="${esc(z.hours)}" data-in="zCalc" placeholder="2.5"></div></div>
-      <div class="field"><label for="zDrops">Пигмент, капель на процедуру (в среднем)</label><input class="input" id="zDrops" type="number" inputmode="numeric" min="0" value="${esc(z.drops)}" data-in="zCalc" placeholder="6">
-        ${S.pigments.some((p) => dropCost(p) > 0) ? '' : '<p class="tiny muted">Чтобы пигмент учёлся в цене, укажите цену флакона в «Мой набор».</p>'}</div>
-      <span class="h2">Что тратится на одну процедуру</span>
-      ${S.supplies.length ? `<div class="stack">${S.supplies.map((s) => `<div class="row"><label for="u_${esc(s.id)}" style="flex:1">${esc(s.name)} <span class="tiny muted">(${esc(s.unit || 'шт')})</span></label>
-        <input class="input" style="width:96px" id="u_${esc(s.id)}" data-u="${esc(s.id)}" type="number" inputmode="decimal" min="0" step="any" value="${esc((z.usage || {})[s.id] || '')}" data-in="zCalc" placeholder="0"></div>`).join('')}</div>`
-        : `<div class="note"><span>Сначала добавьте материалы в разделе «Материалы».</span></div>`}
-      <div class="note" id="zOut"></div>
-      <button class="btn primary" data-a="saveZone" data-id="${esc(id || '')}">Сохранить</button>
-      ${id ? `<button class="btn danger" data-a="delZone" data-id="${esc(id)}">Удалить услугу</button>` : ''}`);
+      <div class="stack"><span class="h2">Из чего складывается стоимость</span>
+        <div class="card stack"><div><div class="item-title">Материалы на одну процедуру</div><div class="tiny muted">Выберите материалы и укажите, сколько единиц уходит. Цену упаковки меняйте в разделе «Материалы».</div></div>
+          ${rows || `<div class="note"><span>${S.supplies.length ? 'Материалы не выбраны. Выберите из списка ниже.' : 'Материалов пока нет. Создайте первый кнопкой ниже или добавьте набор в «Деньги → Материалы».'}</span></div>`}
+          <select class="input" id="zAddMat" aria-label="Добавить материал"><option value="">+ Добавить материал…</option>${free.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}<option value="__new">Новый материал…</option></select>
+          ${newForm}
+        </div>
+        <div class="field"><label for="zDrops">Пигмент, капель на процедуру (в среднем)</label><input class="input" id="zDrops" type="number" inputmode="numeric" min="0" value="${esc(z.drops)}" data-in="zCalc" placeholder="6">
+          ${S.pigments.some((x) => dropCost(x) > 0) ? '' : '<p class="tiny muted">Чтобы пигмент учёлся в цене, укажите цену флакона в «Мой набор».</p>'}</div>
+      </div>
+      <div class="card stack" id="zOut"></div>
+      <details class="fold"><summary>Напоминания клиентам по этой услуге</summary>
+        <p class="tiny muted">Через сколько дней после процедуры напоминать. Пусто: берутся общие сроки из «Клиенты → Сообщения».</p>
+        <div class="grid3"><div class="field"><label for="z_careDays">Уход</label><input class="input" id="z_careDays" type="number" inputmode="numeric" min="0" value="${esc(z.careDays)}" placeholder="${esc(S.settings.careDays)}"></div>
+          <div class="field"><label for="z_corrDays">Коррекция</label><input class="input" id="z_corrDays" type="number" inputmode="numeric" min="0" value="${esc(z.corrDays)}" placeholder="${esc(S.settings.corrDays)}"></div>
+          <div class="field"><label for="z_refreshDays">Обновление</label><input class="input" id="z_refreshDays" type="number" inputmode="numeric" min="0" value="${esc(z.refreshDays)}" placeholder="${esc(S.settings.refreshDays)}"></div></div>
+      </details>
+      <button class="btn primary" data-a="saveZone">Сохранить</button>
+      ${z.id ? `<button class="btn danger" data-a="delZone" data-id="${esc(z.id)}">Удалить услугу</button>` : ''}`, { still: !first });
+    const sh = $('#modalRoot .sheet'); if (sh && !first) sh.scrollTop = st;
     updateZoneOut();
   }
-  function readZoneForm() {
-    const usage = {};
-    document.querySelectorAll('#modalRoot [data-u]').forEach((el) => { const q = num(el.value); if (q > 0) usage[el.dataset.u] = q; });
-    return { name: val('zName').trim(), price: num(val('zPrice')), hours: num(val('zHours')), drops: num(val('zDrops')), usage };
-  }
   function updateZoneOut() {
-    const el = $('#zOut'); if (!el) return;
-    const f = readZoneForm();
+    const el = $('#zOut'); if (!el || !zDraft) return;
+    readZoneFields();
+    const f = { price: num(zDraft.price), hours: num(zDraft.hours), drops: num(zDraft.drops), usage: zDraft.usage };
     const r = zoneStats(f);
-    el.innerHTML = `<span>Расходы: <b>${fmt2(r.supplies)}</b>${r.price > 0 ? ` · Остаётся: <b class="${r.left > 0 ? 'good' : 'bad'}">${fmt(r.left)}</b>` : ''}${r.price > 0 && f.hours > 0 ? ` · За час: <b>${fmt(r.left / f.hours)}</b>` : ''}</span>`;
+    document.querySelectorAll('[data-zsum]').forEach((e) => { const m = supplyById(e.dataset.zsum); e.textContent = m ? fmt2(num(zDraft.usage[e.dataset.zsum]) * unitCost(m)) : ''; });
+    if (!r.price) { el.innerHTML = `<div class="muted small">Укажите цену для клиента, и здесь появится, сколько остаётся с процедуры.</div><div class="row small"><span class="muted">Расходы на процедуру</span><span class="num">${fmt2(r.supplies)}</span></div>`; return; }
+    const gap = r.needPrice - r.price;
+    el.innerHTML = `<div class="sum">
+        <div class="row"><span class="muted">Цена</span><span class="num">${fmt2(r.price)}</span></div>
+        <div class="row"><span class="muted">Материалы</span><span class="num">−${fmt2(usageCostOf(zDraft.usage))}</span></div>
+        ${f.drops > 0 ? `<div class="row"><span class="muted">Пигмент (${esc(f.drops)} кап.)</span>${avgDropCost() > 0 ? `<span class="num">−${fmt2(f.drops * avgDropCost())}</span>` : '<span class="small muted">цена не указана</span>'}</div>` : ''}
+        ${r.tax > 0 ? `<div class="row"><span class="muted">Налог</span><span class="num">−${fmt2(r.tax)}</span></div>` : ''}
+        ${r.rentH > 0 ? `<div class="row"><span class="muted">Аренда на время услуги</span><span class="num">−${fmt2(r.rentH)}</span></div>` : ''}
+        <div class="row total"><span>Остаётся</span><span class="num ${r.left > 0 ? 'good' : 'bad'}">${fmt(r.left)}</span></div></div>
+      ${f.hours > 0 ? `<div class="small muted">За час работы: ${fmt(r.left / f.hours)}</div>` : ''}
+      <div class="note ${gap <= 0.5 ? 'ok' : ''}"><span>Нужная цена при ${r.N} клиентах: <b>${fmt(Math.ceil(r.needPrice))}</b>${gap > 0.5 ? `, сейчас на ${fmt(Math.ceil(gap))} ниже` : ', ваша цена достаточна'}.</span></div>`;
   }
 
   // --- Набор услуг
@@ -1233,6 +1470,23 @@
           <input class="input" type="number" inputmode="decimal" min="0" value="${esc(sel.price)}" data-in="svcPrice" data-k="${x.key}" aria-label="Цена"></div>`;
       }).join('')}</div>`).join('')}
       <button class="btn primary" id="svcAdd" data-a="svcAdd" ${n ? '' : 'disabled'}>${ico('plus')}Добавить ${n} ${plural(n, 'услугу', 'услуги', 'услуг')}</button>`);
+  }
+
+  // --- Набор материалов
+  let supSel = null;
+  function openSupplySet() {
+    if (!supSel) supSel = SUPPLY_SET.map((x) => ({ key: x.key, on: x.on && !S.supplies.some((z) => z.name === x.name), price: x.price }));
+    const n = supSel.filter((x) => x.on).length;
+    modal(`${head('Набор материалов')}
+      <p class="small muted">Отметьте материалы, которые используете, и поставьте цену упаковки. Цены в списке примерные, замените их своими. Потом в каждой услуге выберите, что и сколько на неё уходит.</p>
+      <div class="stack">${SUPPLY_SET.map((x) => {
+        const sel = supSel.find((s) => s.key === x.key);
+        const have = S.supplies.some((z) => z.name === x.name);
+        return `<div class="svc-set"><button class="cb ${sel.on ? 'on' : ''}" data-a="supTog" data-k="${x.key}" aria-label="Выбрать" ${have ? 'disabled' : ''}>${ico('check')}</button>
+          <div><div class="item-title">${esc(x.name)}</div><div class="tiny muted">${have ? 'уже в списке' : x.qty + ' ' + x.unit + ' в упаковке'}</div></div>
+          <input class="input" type="number" inputmode="decimal" min="0" value="${esc(sel.price)}" data-in="supPrice" data-k="${x.key}" aria-label="Цена упаковки" ${have ? 'disabled' : ''}></div>`;
+      }).join('')}</div>
+      <button class="btn primary" id="supAdd" data-a="supAdd" ${n ? '' : 'disabled'}>${ico('plus')}Добавить ${n} ${plural(n, 'материал', 'материала', 'материалов')}</button>`);
   }
 
   // --- Пигмент
@@ -1267,6 +1521,7 @@
     if (!P.recipe.length && P.pigment) P.recipe = recipeFromText(P.pigment);
     P.recipe = P.recipe.map((r) => (r.pid && !pigById(r.pid) ? { pid: '', name: r.name || '', drops: r.drops } : r));
     P.pigment = '';
+    if (!P.usage) P.usage = null;
   }
   // «Шатен 3к + Брюнет 1к» -> строки рецепта (для диктовки и старых записей)
   function recipeFromText(text) {
@@ -1328,15 +1583,20 @@
           <div class="field"><label for="pVolt">Вольтаж</label><input class="input" id="pVolt" value="${esc(P.voltage)}" placeholder="5.5V" data-p="voltage"></div></div>
         <div class="field"><label for="pNotes">Особенности кожи, заметка</label><input class="input" id="pNotes" value="${esc(P.notes)}" placeholder="Жирная кожа, просила не темнить" data-p="notes"></div>`;
     } else if (pStep === 2) {
+      const useMap = P.usage || (zone && zone.usage) || {};
       body = `<div class="field"><label for="pPrice">Сумма чека</label><div class="suffix"><input class="input" id="pPrice" type="number" inputmode="decimal" min="0" value="${esc(P.price)}" data-p="price"><span>${esc(sym())}</span></div></div>
+        ${S.supplies.length ? `<details class="fold"${P.usage ? ' open' : ''}><summary>Материалы этой процедуры</summary>
+          <p class="tiny muted">Сколько реально ушло. Изменения действуют только на эту процедуру, услуга остаётся прежней.</p>
+          ${S.supplies.map((m) => `<div class="mat-row mat-row2"><div><div class="item-title">${esc(m.name)}</div><div class="tiny muted">${fmt2(unitCost(m))} за ${esc(m.unit || 'шт')}</div></div>
+            <input class="input" type="number" inputmode="decimal" min="0" step="any" data-pu="${esc(m.id)}" value="${esc(useMap[m.id] || '')}" placeholder="0" aria-label="Расход: ${esc(m.name)}"></div>`).join('')}</details>` : ''}
         <div class="card stack" id="pLive"></div>`;
     } else {
-      const c = procCosts(zone, num(P.price), P.recipe);
+      const c = procCosts(zone, num(P.price), P.recipe, P.usage);
       body = `<div class="card" style="padding:4px 16px">
           <button class="sum-row" data-a="goStep" data-s="0"><div>${esc(P.client || 'Без имени')}<small>${esc(zone ? zone.name : '')} · ${esc(P.visit)} · ${fmtDate(P.date)}</small></div>${ico('edit')}</button>
           <button class="sum-row" data-a="goStep" data-s="1"><div>${esc(recipeText() || 'Рецепт не записан')}<small>${esc([P.needle, P.voltage].filter(Boolean).join(' · ') || 'игла и вольтаж не указаны')}${P.notes ? ' · ' + esc(P.notes) : ''}</small></div>${ico('edit')}</button>
           <button class="sum-row" data-a="goStep" data-s="2"><div>Чек ${fmt(num(P.price))}<small>Остаётся ${fmt(c.left)}${c.estimated && num(zone && zone.drops) > 0 ? ' (пигмент по оценке)' : ''}</small></div>${ico('edit')}</button></div>
-        ${!P.id ? `<div class="card toggle-row"><div><div class="item-title">Напомнить о коррекции</div><div class="small muted">Через ${esc(S.settings.corrDays)} дн., карточка появится в задачах</div></div><button class="switch ${P.remind ? 'on' : ''}" data-a="togRemind" aria-label="Напомнить"></button></div>` : ''}
+        ${!P.id ? `<div class="card toggle-row"><div><div class="item-title">Напомнить о коррекции</div><div class="small muted">Через ${esc(ruleDays(P.zoneId, 'corrDays'))} дн., карточка появится в задачах</div></div><button class="switch ${P.remind ? 'on' : ''}" data-a="togRemind" aria-label="Напомнить"></button></div>` : ''}
         <button class="btn" data-a="pCaption">${ico('copy')}Скопировать подпись к посту</button>
         ${P.id ? `<button class="btn danger" data-a="delProc" data-id="${esc(P.id)}">Удалить процедуру</button>` : ''}`;
     }
@@ -1353,7 +1613,7 @@
     const zone = S.zones.find((z) => z.id === P.zoneId);
     const price = num(P.price);
     if (!price) { el.innerHTML = '<div class="muted small">Введите сумму чека, и здесь появится, сколько остаётся с процедуры.</div>'; return; }
-    const c = procCosts(zone, price, P.recipe);
+    const c = procCosts(zone, price, P.recipe, P.usage);
     const r = zone ? zoneStats(zone, price) : null;
     el.innerHTML = `<div class="sum">
         <div class="row"><span class="muted">Материалы</span><span class="num">−${fmt2(c.usage)}</span></div>
@@ -1376,18 +1636,19 @@
     const price = num(P.price);
     if (!client) { toast('Введите имя или пометку', 'neutral'); pStep = 0; renderProc(); return; }
     if (!z) { toast('Выберите услугу', 'neutral'); return; }
-    const c = procCosts(z, price, P.recipe);
+    const c = procCosts(z, price, P.recipe, P.usage);
     const rec = {
       id: P.id || uid(), client, zoneId: z.id, zoneName: z.name, visit: P.visit, date: P.date || today(), price,
       pigment: recipeText(), recipe: clone(P.recipe), needle: String(P.needle).trim(), voltage: String(P.voltage).trim(), notes: String(P.notes).trim(),
-      costSupplies: c.supplies, costTax: c.tax, costRent: c.rentH,
+      costSupplies: c.supplies, costTax: c.tax, costRent: c.rentH, status: 'done',
+      usage: P.usage ? Object.fromEntries(Object.entries(P.usage).filter(([, v]) => num(v) > 0).map(([k, v]) => [k, num(v)])) : undefined,
     };
     const isNew = !P.id;
     if (!isNew) S.procedures = S.procedures.map((p) => (p.id === rec.id ? rec : p)); else S.procedures.push(rec);
     let extra = '';
     if (isNew && P.remind && rec.visit === 'Первичка') {
       const cols = S.columns; const col = cols[Math.min(2, cols.length - 2)];
-      S.tasks.push({ id: uid(), title: `Пригласить на коррекцию: ${client}`, note: '', col: col.id, due: addDays(rec.date, num(S.settings.corrDays)), tag: 'clients', mins: 5, checklist: [], created: today() });
+      S.tasks.push({ id: uid(), title: `Пригласить на коррекцию: ${client}`, note: '', col: col.id, due: addDays(rec.date, ruleDays(z.id, 'corrDays')), tag: 'clients', mins: 5, checklist: [], created: today() });
       extra = ' Напоминание добавлено в задачи.';
     }
     save(); pDirty = false; P = null; closeModal(); render(); toast('Процедура сохранена.' + extra);
@@ -1664,6 +1925,57 @@
       });
       svcSel = null; save(); closeModal(); render(); toast(added ? `Добавлено услуг: ${added}` : 'Эти услуги уже есть');
     },
+    supset: () => { closeModal(true); supSel = null; openSupplySet(); },
+    supTog: (el) => { const x = supSel.find((v) => v.key === el.dataset.k); x.on = !x.on; el.classList.toggle('on', x.on); const n = supSel.filter((v) => v.on).length; const b = $('#supAdd'); if (b) { b.disabled = !n; b.innerHTML = `${ico('plus')}Добавить ${n} ${plural(n, 'материал', 'материала', 'материалов')}`; } },
+    supAdd: () => {
+      let added = 0;
+      supSel.filter((x) => x.on).forEach((x) => {
+        const def = SUPPLY_SET.find((d) => d.key === x.key);
+        if (S.supplies.some((z) => z.name === def.name)) return;
+        S.supplies.push({ id: uid(), name: def.name, packPrice: num(x.price), packQty: def.qty, unit: def.unit }); added += 1;
+      });
+      supSel = null; save(); closeModal(); render(); toast(added ? `Добавлено материалов: ${added}. Теперь выберите их в услугах.` : 'Эти материалы уже есть');
+    },
+    zMatDel: (el) => { readZoneFields(); delete zDraft.usage[el.dataset.id]; renderZone(); },
+    zNewCancel: () => { readZoneFields(); zNew = false; renderZone(); },
+    zNewSave: () => {
+      const name = val('nmName').trim();
+      if (!name) { toast('Введите название материала', 'neutral'); return; }
+      readZoneFields();
+      const rec = { id: uid(), name, packPrice: num(val('nmPrice')), packQty: num(val('nmQty')), unit: val('nmUnit').trim() || 'шт' };
+      S.supplies.push(rec); zDraft.usage[rec.id] = 1; zNew = false; save(); renderZone();
+    },
+    clTab: (el) => { clientsTab = el.dataset.id; render(); },
+    procPeriod: (el) => { procPeriod = el.dataset.id; render(); },
+    procZone: (el) => { procZone = el.dataset.id; render(); },
+    lostNew: () => openLost(''),
+    lostEdit: (el) => openLost(el.dataset.id),
+    lsStatus: (el) => { L.status = el.dataset.id; document.querySelectorAll('#modalRoot .seg button').forEach((b) => b.classList.toggle('on', b === el)); },
+    lsSave: () => {
+      const client = val('lsClient').trim();
+      if (!client) { toast('Введите имя или пометку', 'neutral'); return; }
+      const z = S.zones.find((x) => x.id === val('lsZone')) || S.zones[0];
+      const rec = { id: L.id || uid(), client, zoneId: z.id, zoneName: z.name, visit: '', date: val('lsDate') || today(), price: num(val('lsPrice')), status: L.status,
+        pigment: '', recipe: [], needle: '', voltage: '', notes: '', costSupplies: 0, costTax: 0, costRent: 0 };
+      S.procedures = L.id ? S.procedures.map((x) => (x.id === rec.id ? rec : x)) : S.procedures.concat(rec);
+      L = null; save(); closeModal(); render(); toast('Записано: ' + STATUS[rec.status].toLowerCase());
+    },
+    lsDel: (el) => {
+      const p = S.procedures.find((x) => x.id === el.dataset.id); if (!p) return;
+      S.procedures = S.procedures.filter((x) => x.id !== p.id); L = null; save(); closeModal(); render();
+      toast('Запись удалена', 'Вернуть', () => { S.procedures.push(p); save(); render(); });
+    },
+    pricecard: openPriceCard,
+    pcTog: (el) => { const id = el.dataset.id; const i = pc.sel.indexOf(id); if (i >= 0) pc.sel.splice(i, 1); else pc.sel.push(id); el.classList.toggle('on', i < 0); drawPriceCard(); },
+    pcSave: () => { const cv = $('#pcCanvas'); cv.toBlob((b) => { if (!b) { toast('Не получилось сохранить картинку', 'neutral'); return; } const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'prajs-kartochka.png'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast('Картинка сохранена в загрузки'); }, 'image/png'); },
+    pcShare: () => {
+      const cv = $('#pcCanvas');
+      cv.toBlob((b) => {
+        const f = b && new File([b], 'prajs-kartochka.png', { type: 'image/png' });
+        if (f && navigator.canShare && navigator.canShare({ files: [f] })) navigator.share({ files: [f] }).catch(() => {});
+        else toast('Здесь нельзя поделиться напрямую. Нажмите «Скачать картинку».', 'neutral');
+      }, 'image/png');
+    },
     supply: (el) => openSupply(el.dataset.id),
     saveSupply: (el) => {
       const name = val('spName').trim();
@@ -1681,13 +1993,19 @@
       toast('Материал удалён', 'Вернуть', () => { S.supplies.push(s); S.zones = JSON.parse(backup); save(); render(); });
     },
     zone: (el) => openZone(el.dataset.id),
-    saveZone: (el) => {
-      const f = readZoneForm();
-      if (!f.name) { toast('Введите название', 'neutral'); return; }
-      const old = S.zones.find((z) => z.id === el.dataset.id);
-      const rec = { id: el.dataset.id || uid(), name: f.name, price: f.price, hours: f.hours, drops: f.drops, usage: f.usage, kw: old && old.kw && old.name === f.name ? old.kw : [f.name.slice(0, 4).toLowerCase()] };
+    saveZone: () => {
+      readZoneFields();
+      const f = zDraft;
+      const name = String(f.name).trim();
+      if (!name) { toast('Введите название', 'neutral'); return; }
+      const usage = {};
+      Object.entries(f.usage).forEach(([k, v]) => { if (num(v) > 0 && supplyById(k)) usage[k] = num(v); });
+      const old = S.zones.find((z) => z.id === f.id);
+      const rec = { id: f.id || uid(), name, price: num(f.price), hours: num(f.hours), drops: num(f.drops), usage,
+        careDays: num(f.careDays) || '', corrDays: num(f.corrDays) || '', refreshDays: num(f.refreshDays) || '',
+        kw: old && old.kw && old.name === name ? old.kw : [name.slice(0, 4).toLowerCase()] };
       S.zones = old ? S.zones.map((z) => (z.id === rec.id ? rec : z)) : S.zones.concat(rec);
-      save(); closeModal(); render();
+      zDraft = null; save(); closeModal(); render(); toast('Услуга сохранена');
     },
     delZone: (el) => {
       const z = S.zones.find((x) => x.id === el.dataset.id); if (!z) return;
@@ -1723,7 +2041,7 @@
     pBack: () => { if (pStep > 0) { pStep -= 1; renderProc(); } },
     goStep: (el) => { pStep = Number(el.dataset.s); renderProc(); },
     pickClient: (el) => { P.client = el.dataset.n; pDirty = true; const i = $('#pClient'); if (i) i.value = P.client; },
-    pickZone: (el) => { P.zoneId = el.dataset.id; pDirty = true; if (!P.priceTouched) P.price = (S.zones.find((z) => z.id === P.zoneId) || {}).price || ''; renderProc(); },
+    pickZone: (el) => { P.zoneId = el.dataset.id; P.usage = null; pDirty = true; if (!P.priceTouched) P.price = (S.zones.find((z) => z.id === P.zoneId) || {}).price || ''; renderProc(); },
     pickVisit: (el) => { P.visit = el.dataset.v; pDirty = true; renderProc(); },
     compAdd: () => {
       const used = new Set(P.recipe.map((r) => r.pid));
@@ -1885,6 +2203,7 @@
 
   document.addEventListener('input', (e) => {
     const t = e.target;
+    if (t.dataset && t.dataset.pu !== undefined && P) { const zn = S.zones.find((x) => x.id === P.zoneId); if (!P.usage) P.usage = clone((zn && zn.usage) || {}); P.usage[t.dataset.pu] = t.value; pDirty = true; updatePLive(); return; }
     if (t.dataset && t.dataset.rname !== undefined && P) { const r = P.recipe[Number(t.dataset.rname)]; if (r) { r.name = t.value; pDirty = true; } return; }
     if (t.dataset && t.dataset.p && P) { P[t.dataset.p] = t.value; pDirty = true; if (t.dataset.p === 'price') { P.priceTouched = true; updatePLive(); } return; }
     const k = t.dataset && t.dataset.in;
@@ -1897,7 +2216,17 @@
       clientQuery = t.value; const l = $('#clientList'); if (l) l.innerHTML = clientCards();
     } else if (k === 'kitq') {
       kitQuery = t.value; const pos = t.selectionStart; render(); const i = $('#kitSearch'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (x) { /* ничего */ } }
+    } else if (k === 'procq') {
+      procQuery = t.value; const l = $('#procList'); if (l) l.innerHTML = procRows();
+    } else if (k === 'wi') {
+      wi.price = num($('#wiPrice').value); wi.disc = num($('#wiDisc').value); wi.clients = num($('#wiN').value);
+      $('#wiPriceV').textContent = fmt(wi.price); $('#wiDiscV').textContent = wi.disc + '%'; $('#wiNV').textContent = wi.clients;
+      const o = $('#wiOut'); if (o) o.innerHTML = wiOut();
+    } else if (k === 'pcText') {
+      pc.title = val('pcTitle'); pc.foot = val('pcFoot'); drawPriceCard();
+    } else if (k === 'lsPrice') { L.touched = true;
     } else if (k === 'spCalc') { $('#spOut').innerHTML = spOut(val('spPrice'), val('spQty'), val('spUnit')); }
+    else if (k === 'supPrice') { const x = supSel.find((v) => v.key === t.dataset.k); if (x) x.price = t.value; }
     else if (k === 'zCalc') updateZoneOut();
     else if (k === 'pgCalc') { $('#pgOut').innerHTML = pgOut(val('pgPrice'), val('pgMl')); }
     else if (k === 'pgColor') { pigDraft.color = t.value; document.querySelectorAll('#pgSw button').forEach((b) => b.classList.remove('on')); }
@@ -1909,6 +2238,9 @@
     const t = e.target;
     if (t.dataset && t.dataset.rsel !== undefined && P) { const r = P.recipe[Number(t.dataset.rsel)]; if (r) { r.pid = t.value; pDirty = true; renderProc(); } return; }
     const k = t.dataset && t.dataset.in;
+    if (t.id === 'zAddMat' && zDraft) { const v = t.value; readZoneFields(); if (v === '__new') zNew = true; else if (v) zDraft.usage[v] = 1; renderZone(); return; }
+    if (k === 'wiZone') { wi = { zoneId: t.value, price: null, disc: 0, clients: null }; render(); return; }
+    if (t.id === 'lsZone' && L) { L.zoneId = t.value; const z = S.zones.find((x) => x.id === t.value); if (z && !L.touched) { const pr = $('#lsPrice'); if (pr) pr.value = z.price || ''; } return; }
     if (k === 'mode') { $('#rentMonthly').hidden = t.value !== 'monthly'; $('#rentHourly').hidden = t.value !== 'hourly'; }
     else if (k === 'import') { importData(t.files[0]); t.value = ''; }
     else if (k === 'bgfile') {

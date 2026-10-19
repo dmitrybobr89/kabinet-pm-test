@@ -539,3 +539,22 @@ body.has-photo .wave { opacity: .25; }
 .swatch.none { background: transparent; border: 1.5px dashed rgba(157, 184, 178, .6); box-shadow: none; }
 .comp2-top select.input { min-height: 46px; padding: 6px 12px; font-size: 15px; }
 .comp2-bot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* ===== Материалы в услуге и в процедуре ===== */
+.mat-row { display: grid; grid-template-columns: 1fr 84px auto 34px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.mat-row:last-of-type { border-bottom: 0; }
+.mat-row2 { grid-template-columns: 1fr 96px; }
+.mat-row .input { min-height: 42px; padding: 6px 10px; text-align: right; }
+.mat-sum { min-width: 52px; text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fold { border: 1px solid var(--line); border-radius: 18px; padding: 4px 14px 12px; background: var(--g2); }
+.fold > summary { cursor: pointer; list-style: none; min-height: 46px; display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: ''; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .2s; margin-right: 4px; }
+.fold[open] > summary::after { transform: rotate(-135deg); }
+.fold > p { margin: 0 0 10px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.d-btns2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.svc-set .cb[disabled], .svc-set .input[disabled] { opacity: .45; }
+.range { width: 100%; min-height: 32px; accent-color: var(--accent2); }
+.pc-canvas { width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); background: var(--soft); display: block; }
+.pc-row { grid-template-columns: 30px 1fr auto; }
