@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Кабинет мастера ПМ</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#001a16">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Учёт и управление бизнесом мастера перманентного макияжа">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Кабинет ПМ">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Рисунки (линейная графика): знак, аппарат-ручка, картридж с иглой, флакон пигмента -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="a-logo" viewBox="0 0 40 40">
+        <circle cx="20" cy="20" r="19" fill="currentColor"/>
+        <path d="M20 8s-7 8.5-7 13.5a7 7 0 0 0 14 0C27 16.5 20 8 20 8z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M20 22.5V29" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+        <path d="M31 8l.9 2.2 2.2.9-2.2.9L31 14.2l-.9-2.2-2.2-.9 2.2-.9z" fill="#fff"/>
+      </symbol>
+      <symbol id="a-pen" viewBox="0 0 420 120">
+        <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="64" y="34" width="228" height="52" rx="26"/>
+          <path d="M120 40v40M132 38v44M144 37v46M156 37v46M168 37v46M180 37v46M192 37v46M204 38v44M216 40v40"/>
+          <rect x="30" y="46" width="42" height="28" rx="12"/>
+          <path d="M30 60C14 60 12 98 2 106"/>
+          <path d="M292 40l36 9v22l-36 9"/>
+          <rect x="328" y="53" width="40" height="14" rx="4"/>
+          <path d="M368 56l46 4-46 4z"/>
+          <circle cx="96" cy="60" r="6"/>
+          <path d="M250 44v32" stroke-width="1"/>
+        </g>
+      </symbol>
+      <symbol id="a-cart" viewBox="0 0 120 200">
+        <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="38" y="8" width="44" height="92" rx="9"/>
+          <path d="M38 34h44M38 54h44M38 76h44"/>
+          <circle cx="60" cy="21" r="4"/>
+          <path d="M49 100v30h22v-30"/>
+          <path d="M56 130h8l-4 64z"/>
+        </g>
+      </symbol>
+      <symbol id="a-bottle" viewBox="0 0 140 190">
+        <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="42" y="8" width="44" height="28" rx="6"/>
+          <path d="M52 8v28M62 8v28M72 8v28"/>
+          <rect x="48" y="36" width="32" height="16" rx="3"/>
+          <path d="M34 52h60a14 14 0 0 1 14 14v100a14 14 0 0 1-14 14H34a14 14 0 0 1-14-14V66a14 14 0 0 1 14-14z"/>
+          <rect x="32" y="92" width="64" height="52" rx="8"/>
+          <path d="M42 108h44M42 120h28"/>
+          <path d="M118 22s-13 17-13 27a13 13 0 0 0 26 0c0-10-13-27-13-27z"/>
+        </g>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- Фон: волна и полосы света, как в эталоне; цвета берутся из темы -->
+  <svg class="wave" viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="gStreak" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--streak)" stop-opacity="0"/><stop offset=".5" stop-color="var(--streak)"/><stop offset="1" stop-color="var(--streak)" stop-opacity="0"/></linearGradient>
+      <linearGradient id="gWave" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--wave-top)"/><stop offset="1" stop-color="var(--wave-bot)"/></linearGradient>
+      <linearGradient id="gCrest" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--crest)" stop-opacity="0"/><stop offset=".6" stop-color="var(--crest)"/><stop offset="1" stop-color="var(--crest)" stop-opacity=".4"/></linearGradient>
+      <filter id="fBlur"><feGaussianBlur stdDeviation="3"/></filter>
+    </defs>
+    <polygon points="-20,60 420,-30 420,10 -20,120" fill="url(#gStreak)"/>
+    <polygon points="-20,150 420,60 420,84 -20,190" fill="url(#gStreak)" opacity=".7"/>
+    <polygon points="-20,300 420,190 420,205 -20,320" fill="url(#gStreak)" opacity=".5"/>
+    <path d="M-30 500C100 440 290 450 430 540L430 830L-30 830Z" fill="url(#gWave)"/>
+    <path d="M-30 500C100 440 290 450 430 540" fill="none" stroke="url(#gCrest)" stroke-width="3" filter="url(#fBlur)"/>
+    <path d="M-30 500C100 440 290 450 430 540" fill="none" stroke="url(#gCrest)" stroke-width="1"/>
+    <path d="M-30 610C120 565 300 585 430 650" fill="none" stroke="url(#gCrest)" stroke-width="1" opacity=".5"/>
+  </svg>
+
+  <div class="bg-art" aria-hidden="true">
+    <svg class="b1" viewBox="0 0 420 120"><use href="#a-pen"/></svg>
+    <svg class="b2" viewBox="0 0 120 200"><use href="#a-cart"/></svg>
+    <svg class="b3" viewBox="0 0 140 190"><use href="#a-bottle"/></svg>
+  </div>
+
+  <div id="welcomeRoot"></div>
+  <div id="app"></div>
+  <div id="loader" aria-hidden="true"><svg viewBox="0 0 40 40"><use href="#a-logo"/></svg></div>
+  <div id="modalRoot"></div>
+  <div id="dialogRoot"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <noscript>Для работы приложения нужен включённый JavaScript.</noscript>
+  <script src="app.js"></script>
+</body>
+</html>
