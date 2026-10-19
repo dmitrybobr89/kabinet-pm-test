@@ -647,7 +647,7 @@
     const hero = hasData ? `<div class="hero"><div class="art-wrap pen">${ART.pen}</div><div class="hero-in">
         <div class="eyebrow">Чистыми за ${esc(monthName(monthKey()).split(' ')[0])}</div>
         <div class="hero-num ${m.net < 0 && m.count > 0 ? 'neg' : ''}">${m.count ? fmt(m.net) : fmt(0)}</div>
-        <div class="hero-meta">${m.count ? `${m.count} ${plural(m.count, 'процедура', 'процедуры', 'процедур')} · выручка ${fmt(m.gross)}` : 'В этом месяце записей пока нет'}</div>
+        <div class="hero-meta">${m.count ? `${m.count} ${plural(m.count, 'процедура', 'процедуры', 'процедур')} · выручка ${fmt(m.gross)}` : 'В этом месяце процедур пока нет'}</div>
         ${m.fixed > 0 ? `<div><div class="bar ${m.cover >= 1 ? 'ok' : ''}" role="progressbar" aria-valuenow="${Math.round(m.cover * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(m.cover * 100)}%"></i></div>
           <div class="tiny muted" style="margin-top:6px">Постоянные расходы ${fmt(m.fixed)}: покрыто ${Math.round(m.cover * 100)}%</div></div>` : ''}
         ${fc ? `<div class="hero-fc">К концу месяца при таком темпе: <b>${fmt(fc.projNet)}</b></div>` : ''}
