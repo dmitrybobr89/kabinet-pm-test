@@ -1,10 +1,10 @@
 'use strict';
-/* Кабинет мастера ПМ: прототип 0.5.
+/* Кабинет мастера ПМ: прототип 0.6.
    Учёт и управление бизнесом мастера. Всё хранится только в этом браузере (localStorage).
    Серверов и ИИ нет: «диктовка» разбирает текст правилами прямо на телефоне. */
 (() => {
   const KEY = 'pmu_cabinet_v1';
-  const VERSION_LABEL = 'Кабинет мастера, прототип 0.5';
+  const VERSION_LABEL = 'Кабинет мастера, прототип 0.6';
 
   // Что бесплатно, а что нет. Меняется в одном месте.
   const PLAN = {
@@ -127,7 +127,6 @@
   ];
 
   const INTROS = {
-    home: { ico: 'home', title: 'Главная', text: 'Здесь главное на сегодня: сколько вы заработали за месяц, какие задачи на день и кому пора написать.', when: 'Откройте утром и вечером: две минуты, и вы в курсе всего.' },
     clients: { ico: 'users', title: 'Клиенты', text: 'Карточки клиентов с рецептами и вкладка «Процедуры»: вся история с фильтрами, отмены и неявки. Здесь же напоминания и готовые сообщения. Перед коррекцией откройте карточку и подставьте прошлый рецепт.', when: 'Перед приходом клиента и после процедуры.' },
     board: { ico: 'board', title: 'Задачи', text: 'Ваш планер, как в Trello. Колонки можно переименовать, сворачивать и разворачивать, в карточке есть чек-лист и срок.', when: 'Утром, чтобы спланировать день.' },
     money: { ico: 'coin', title: 'Деньги', text: 'Цена процедуры, отчёт за месяц, «Что если», прайс-карточка для Instagram, а также услуги, материалы и ваш набор пигментов: из них считается, сколько остаётся с каждой процедуры.', when: 'Когда меняете прайс, закупаете материалы или подводите итоги.', warn: 'Без услуг и материалов расчёты будут пустыми. Начните с настройки на главной.' },
@@ -677,32 +676,29 @@
         ${fc ? `<div class="hero-fc">К концу месяца при таком темпе: <b>${fmt(fc.projNet)}</b></div>` : ''}
       </div></div>` : '';
 
-    return `<div><h1 class="h1">${S.settings.masterName.trim() ? 'Здравствуйте, ' + esc(S.settings.masterName.trim()) : greetingShort()}</h1><div class="sub">${esc(date)}</div></div>
-      <div class="row"><button class="chip chip-id" data-a="settings"><span class="dot"></span>${esc(S.settings.masterName.trim() || 'Мой кабинет')}</button><button class="icon-btn boxed" data-a="go" data-page="bg" aria-label="Фон и тема">${ico('palette')}</button></div>
-      <div class="stack"><span class="h2">Быстрые действия</span>
-        <div class="qa-grid">
-          <button class="qa" data-a="proc" data-id="">${ico('plus')}Процедура</button>
-          <button class="qa" data-a="voice">${ico('mic')}Диктовать</button>
-          <button class="qa" data-a="tab" data-id="clients">${ico('users')}Клиенты</button>
-          <button class="qa" data-a="go" data-page="clients" data-sub="msgs">${ico('msg')}Сообщения</button>
-        </div></div>
-      ${!S.setupDismissed && doneN < steps.length ? `<div class="card tap setup-card" data-a="setup"><div class="ic amber">${ico('tasks')}</div><div><div class="item-title">Завершите настройку (${doneN}/${steps.length})</div><div class="small muted">${esc(next.title)}: ${esc(next.hint)}</div></div><button class="x" data-a="dismissSetup" aria-label="Скрыть">${ico('close')}</button></div>` : ''}
-      ${hasData ? hero : `<div class="hero"><div class="art-wrap pen">${ART.pen}</div><div class="hero-in"><div class="eyebrow">Начало работы</div><div class="hero-title">Посчитаем вашу процедуру</div>
+    const emptyHero = `<div class="hero"><div class="art-wrap pen">${ART.pen}</div><div class="hero-in"><div class="eyebrow">Начало работы</div><div class="hero-title">Посчитаем вашу процедуру</div>
         <p class="muted small">Укажите расходы и цены, и кабинет покажет, сколько остаётся с каждой процедуры и какая цена нужна.</p>
-        <button class="btn primary" data-a="sample">Посмотреть на примере</button><button class="btn" data-a="settings">Ввести свои данные</button></div></div>`}
-      <div class="stack"><span class="h2">Статистика</span><div class="grid2">
-        <div class="card stat"><div class="ic">${ico('calcheck')}</div><div><div class="v">${m.count}</div><div class="l">Процедур за месяц</div></div></div>
-        <div class="card stat"><div class="ic">${ico('coin')}</div><div><div class="v">${nf0.format(m.gross)}</div><div class="l">Выручка, ${esc(sym())}</div></div></div>
-        <div class="card stat"><div class="ic">${ico('userplus')}</div><div><div class="v">${newClients}</div><div class="l">Новых клиентов (30 дн.)</div></div></div>
-        <div class="card stat"><div class="ic amber">${ico('msg')}</div><div><div class="v">${fl.length}</div><div class="l">Пора написать</div></div></div></div></div>
+        <button class="btn primary" data-a="sample">Посмотреть на примере</button><button class="btn" data-a="settings">Ввести свои данные</button></div></div>`;
+    const showSetup = !S.setupDismissed && doneN < steps.length && next && next.k !== 'cli';
+
+    return `<div><h1 class="h1">${S.settings.masterName.trim() ? 'Здравствуйте, ' + esc(S.settings.masterName.trim()) : greetingShort()}</h1><div class="sub">${esc(date)}</div></div>
+      <div class="row"><button class="chip chip-id" data-a="settings"><span class="dot"></span>${esc(S.settings.masterName.trim() || 'Мой кабинет')}</button></div>
+      ${hasData ? hero : emptyHero}
+      ${hasData ? `<button class="btn primary big" data-a="proc" data-id="">${ico('plus')}Новая процедура</button>` : ''}
+      ${ins.length ? `<div class="stack"><span class="h2">Главное сейчас</span>${ins.map(insightCard).join('')}</div>` : ''}
+      ${showSetup ? `<div class="card tap setup-card" data-a="setup"><div class="ic amber">${ico('tasks')}</div><div><div class="item-title">Завершите настройку (${doneN}/${steps.length})</div><div class="small muted">${esc(next.title)}: ${esc(next.hint)}</div></div><button class="x" data-a="dismissSetup" aria-label="Скрыть">${ico('close')}</button></div>` : ''}
       <div class="stack">
         <div class="row"><span class="h2">Сегодня${planned ? ` · ${mins(planned)}` : ''}</span><button class="link" data-a="tab" data-id="board">Все задачи</button></div>
         ${tt.slice(0, 4).map(taskRow).join('') || `<div class="card empty small">На сегодня задач нет.</div>`}
         ${tt.length > 4 ? `<button class="link" data-a="tab" data-id="board">Ещё ${tt.length - 4}</button>` : ''}
         <div class="quickadd"><input class="input" id="quickTask" placeholder="Новая задача на сегодня" enterkeyhint="done"><button class="btn small primary" data-a="quickadd" aria-label="Добавить">${ico('plus')}</button></div>
       </div>
-      ${ins.length ? `<div class="stack"><span class="h2">Главное сейчас</span>${ins.map(insightCard).join('')}</div>` : ''}
       ${fl.length ? `<div class="stack"><div class="row"><span class="h2">Пора написать</span><button class="link" data-a="go" data-page="clients" data-sub="msgs">Все</button></div>${fl.slice(0, 3).map(followRow).join('')}</div>` : ''}
+      ${S.procedures.length ? `<div class="stack"><span class="h2">Статистика</span><div class="grid2">
+        <div class="card stat"><div class="ic">${ico('calcheck')}</div><div><div class="v">${m.count}</div><div class="l">Процедур за месяц</div></div></div>
+        <div class="card stat"><div class="ic">${ico('coin')}</div><div><div class="v">${nf0.format(m.gross)}</div><div class="l">Выручка, ${esc(sym())}</div></div></div>
+        <div class="card stat"><div class="ic">${ico('userplus')}</div><div><div class="v">${newClients}</div><div class="l">Новых клиентов (30 дн.)</div></div></div>
+        <div class="card stat"><div class="ic amber">${ico('msg')}</div><div><div class="v">${fl.length}</div><div class="l">Пора написать</div></div></div></div></div>` : ''}
       ${needBackup ? `<div class="note warn">${ico('info')}<span>Данные хранятся только в этом телефоне. Сохраните копию, чтобы не потерять базу. <button class="link" data-a="export">Сохранить копию</button></span></div>` : ''}`;
   }
 
@@ -1254,15 +1250,6 @@
       <button class="btn" data-a="wStart" data-id="empty">Начать с пустого</button>
       <div class="meta"><span>Работает без интернета</span><span>iPhone и Android</span><span>Данные только у вас</span></div></div></div>`;
   }
-  function openIntake(kind) {
-    modal(`${head('Давайте познакомимся')}
-      <div class="steps-bar"><span class="h2">Шаг 2 из 2</span><div class="dots"><i class="done"></i><i class="on"></i></div></div>
-      <div class="field"><label for="obName">Как к вам обращаться (необязательно)</label><input class="input" id="obName" placeholder="Например: Анна" autofocus></div>
-      <div class="field"><label for="obCur">Валюта</label><select class="input" id="obCur">${Object.keys(CURRENCIES).map((c) => `<option value="${c}" ${S.settings.currency === c ? 'selected' : ''}>${c}${CURRENCIES[c] !== c ? ' (' + CURRENCIES[c] + ')' : ''}</option>`).join('')}</select></div>
-      <div class="note">${ico('shield')}<span>Данные сохраняются только на этом телефоне и никуда не отправляются. Раз в месяц делайте копию в настройках.</span></div>
-      <button class="btn primary" data-a="obGo" data-id="${kind}">Продолжить</button>`);
-  }
-
   // --- Боковое меню
   function openDrawer() {
     const nm = S.settings.masterName.trim() || 'Мастер';
@@ -1512,8 +1499,7 @@
   const pgOut = (price, ml) => { const dc = num(ml) > 0 && num(S.settings.dropsPerMl) > 0 ? num(price) / (num(ml) * num(S.settings.dropsPerMl)) : 0; return dc > 0 ? `<span>Одна капля стоит около <b>${fmt2(dc)}</b> (при ${esc(S.settings.dropsPerMl)} каплях в мл)</span>` : '<span>Введите цену и объём, и приложение посчитает стоимость капли</span>'; };
 
   // --- Запись (пошаговый мастер)
-  const P_STEPS = ['Клиент', 'Рецепт', 'Деньги', 'Итог'];
-  let P = null; let pStep = 0; let pDirty = false;
+  let P = null; let pDirty = false; let pOpen = {};
   const recipeLine = (r) => { const p = pigById(r.pid); const n = p ? p.name : String(r.name || '').trim(); return n ? `${n} ${r.drops}к` : ''; };
   const recipeText = () => P.recipe.map(recipeLine).filter(Boolean).join(' + ');
   // рецепт приводим к строкам «пигмент + капли»: текст (диктовка, старые записи) разбирается, удалённые из набора пигменты остаются «другими»
@@ -1535,7 +1521,7 @@
       return p ? { pid: p.id, drops } : { pid: '', name, drops };
     }).filter(Boolean);
   }
-  function openProc(id, prefill, step) {
+  function openProc(id, prefill) {
     const base = id ? S.procedures.find((x) => x.id === id) : null;
     if (id && !base) return;
     if (!S.zones.length) { toast('Сначала выберите услуги', 'neutral'); openServiceSet(); return; }
@@ -1546,31 +1532,42 @@
     if (!S.zones.find((z) => z.id === P.zoneId)) P.zoneId = S.zones[0].id;
     if (!P.priceTouched || P.price === '') P.price = S.zones.find((z) => z.id === P.zoneId).price || '';
     normRecipe();
-    pStep = step != null ? step : (base ? 3 : 0); pDirty = false;
+    pOpen = {}; pDirty = false;
     renderProc(true);
   }
   function renderProc(first) {
     const old = $('#modalRoot .sheet'); const st = old ? old.scrollTop : 0;
     modal(procHtml(), { still: !first, wiz: 1 });
     const sh = $('#modalRoot .sheet'); if (sh && !first) sh.scrollTop = st;
-    if (pStep === 2) updatePLive();
+    updatePLive();
   }
+  function pPrevHtml() {
+    const k = clientKey(P.client);
+    const prev = k ? S.procedures.filter((p) => clientKey(p.client) === k && p.id !== P.id).sort((a, b) => b.date.localeCompare(a.date))[0] : null;
+    if (!prev || !(prev.pigment || (prev.recipe && prev.recipe.length) || prev.needle || prev.voltage)) return '';
+    return `<div class="note"><span>Была ${fmtDate(prev.date)}: ${esc(prev.pigment || 'рецепт не записан')}. <button class="link" data-a="repeat" data-id="${esc(prev.id)}">Подставить как в прошлый раз</button></span></div>`;
+  }
+  function updatePrev() { const el = $('#pPrev'); if (el && P) el.innerHTML = pPrevHtml(); }
   function procHtml() {
     const zone = S.zones.find((z) => z.id === P.zoneId);
-    let body = '';
-    if (pStep === 0) {
-      const recent = clientsAgg().slice(0, 5);
-      body = `<div class="field"><label for="pClient">Имя, ник или пометка</label><input class="input" id="pClient" list="clientNames" value="${esc(P.client)}" placeholder="Например: Аня рыжая" data-p="client" autocomplete="off" ${P.id || P.client ? '' : 'autofocus'}>
-          <datalist id="clientNames">${[...new Set(S.procedures.map((x) => x.client))].map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
-          <p class="tiny muted">Настоящие фамилии и телефоны вводить не обязательно.</p></div>
-        ${recent.length ? `<div class="chips">${recent.map((c) => `<button class="chip" data-a="pickClient" data-n="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>` : ''}
-        <div class="stack"><span class="h2">Услуга</span><div class="svc-grid">${S.zones.map((z) => `<button class="svc ${z.id === P.zoneId ? 'on' : ''}" data-a="pickZone" data-id="${esc(z.id)}">${esc(z.name)}<small>${fmt(num(z.price))}</small></button>`).join('')}</div></div>
-        <div class="stack"><span class="h2">Визит</span><div class="seg">${VISITS.map((v) => `<button class="${P.visit === v ? 'on' : ''}" data-a="pickVisit" data-v="${v}">${v}</button>`).join('')}</div></div>
-        <div class="field"><label for="pDate">Дата</label><input class="input" id="pDate" type="date" value="${esc(P.date)}" data-p="date"></div>`;
-    } else if (pStep === 1) {
-      const k = clientKey(P.client);
-      const prev = k ? S.procedures.filter((p) => clientKey(p.client) === k && p.id !== P.id).sort((a, b) => b.date.localeCompare(a.date))[0] : null;
-      body = `${prev && (prev.pigment || (prev.recipe && prev.recipe.length) || prev.needle || prev.voltage) ? `<div class="note"><span>Была ${fmtDate(prev.date)}: ${esc(prev.pigment || 'рецепт не записан')}. <button class="link" data-a="repeat" data-id="${esc(prev.id)}">Подставить как в прошлый раз</button></span></div>` : ''}
+    const recent = clientsAgg().slice(0, 5);
+    const useMap = P.usage || (zone && zone.usage) || {};
+    const isOpen = (key, auto) => (pOpen[key] !== undefined ? pOpen[key] : auto);
+    const recipeOpen = isOpen('recipe', P.recipe.length > 0 || !!(P.needle || P.voltage || P.notes));
+    const matsOpen = isOpen('mats', !!P.usage);
+    const dateOpen = isOpen('date', P.date !== today());
+    const body = `${!P.id ? `<button class="link" data-a="procVoice">${ico('mic')}Продиктовать голосом</button>` : ''}
+      <div class="field"><label for="pClient">Имя, ник или пометка</label><input class="input" id="pClient" list="clientNames" value="${esc(P.client)}" placeholder="Например: Аня рыжая" data-p="client" autocomplete="off" ${P.id || P.client ? '' : 'autofocus'}>
+        <datalist id="clientNames">${[...new Set(S.procedures.map((x) => x.client))].map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+        <p class="tiny muted">Настоящие фамилии и телефоны вводить не обязательно.</p></div>
+      ${recent.length ? `<div class="chips">${recent.map((c) => `<button class="chip" data-a="pickClient" data-n="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>` : ''}
+      <div class="stack"><span class="h2">Услуга</span><div class="svc-grid">${S.zones.map((z) => `<button class="svc ${z.id === P.zoneId ? 'on' : ''}" data-a="pickZone" data-id="${esc(z.id)}">${esc(z.name)}<small>${fmt(num(z.price))}</small></button>`).join('')}</div></div>
+      <div class="stack"><span class="h2">Визит</span><div class="seg">${VISITS.map((v) => `<button class="${P.visit === v ? 'on' : ''}" data-a="pickVisit" data-v="${v}">${v}</button>`).join('')}</div></div>
+      <div class="field"><label for="pPrice">Сумма чека</label><div class="suffix"><input class="input" id="pPrice" type="number" inputmode="decimal" min="0" value="${esc(P.price)}" data-p="price"><span>${esc(sym())}</span></div></div>
+      <div class="card stack" id="pLive"></div>
+      <div id="pPrev">${pPrevHtml()}</div>
+      <details class="fold" data-fold="recipe"${recipeOpen ? ' open' : ''}><summary>Рецепт и параметры</summary>
+        <div class="fold-body">
         <div class="stack"><div class="row"><span class="h2">Пигменты в рецепте</span><button class="link" data-a="compAdd">+ Добавить пигмент</button></div>
           ${P.recipe.map((r, i) => { const p = pigById(r.pid); return `<div class="card comp2">
             <div class="comp2-top"><span class="swatch${p ? '' : ' none'}" style="${p ? 'background:' + esc(p.color) : ''}"></span>
@@ -1581,40 +1578,30 @@
               <div class="stepper"><button data-a="dropDec" data-i="${i}" aria-label="Меньше капель">−</button><b>${esc(r.drops)}</b><button data-a="dropInc" data-i="${i}" aria-label="Больше капель">+</button></div></div></div>`; }).join('') || `<div class="note"><span>${S.pigments.length ? 'Нажмите «Добавить пигмент» и выберите оттенок из списка. Стоимость рецепта посчитается сама.' : 'Ваш набор пуст. Нажмите «Добавить пигмент» и впишите название. Чтобы цена считалась точно, добавьте пигменты в «Деньги → Мой набор».'}</span></div>`}</div>
         <div class="grid2"><div class="field"><label for="pNeedle">Игла или картридж</label><input class="input" id="pNeedle" value="${esc(P.needle)}" placeholder="0.30 RLLT" data-p="needle"></div>
           <div class="field"><label for="pVolt">Вольтаж</label><input class="input" id="pVolt" value="${esc(P.voltage)}" placeholder="5.5V" data-p="voltage"></div></div>
-        <div class="field"><label for="pNotes">Особенности кожи, заметка</label><input class="input" id="pNotes" value="${esc(P.notes)}" placeholder="Жирная кожа, просила не темнить" data-p="notes"></div>`;
-    } else if (pStep === 2) {
-      const useMap = P.usage || (zone && zone.usage) || {};
-      body = `<div class="field"><label for="pPrice">Сумма чека</label><div class="suffix"><input class="input" id="pPrice" type="number" inputmode="decimal" min="0" value="${esc(P.price)}" data-p="price"><span>${esc(sym())}</span></div></div>
-        ${S.supplies.length ? `<details class="fold"${P.usage ? ' open' : ''}><summary>Материалы этой процедуры</summary>
-          <p class="tiny muted">Сколько реально ушло. Изменения действуют только на эту процедуру, услуга остаётся прежней.</p>
+        <div class="field"><label for="pNotes">Особенности кожи, заметка</label><input class="input" id="pNotes" value="${esc(P.notes)}" placeholder="Жирная кожа, просила не темнить" data-p="notes"></div>
+        </div></details>
+      ${S.supplies.length ? `<details class="fold" data-fold="mats"${matsOpen ? ' open' : ''}><summary>Материалы этой процедуры</summary>
+        <div class="fold-body"><p class="tiny muted">Сколько реально ушло. Изменения действуют только на эту процедуру, услуга остаётся прежней.</p>
           ${S.supplies.map((m) => `<div class="mat-row mat-row2"><div><div class="item-title">${esc(m.name)}</div><div class="tiny muted">${fmt2(unitCost(m))} за ${esc(m.unit || 'шт')}</div></div>
-            <input class="input" type="number" inputmode="decimal" min="0" step="any" data-pu="${esc(m.id)}" value="${esc(useMap[m.id] || '')}" placeholder="0" aria-label="Расход: ${esc(m.name)}"></div>`).join('')}</details>` : ''}
-        <div class="card stack" id="pLive"></div>`;
-    } else {
-      const c = procCosts(zone, num(P.price), P.recipe, P.usage);
-      body = `<div class="card" style="padding:4px 16px">
-          <button class="sum-row" data-a="goStep" data-s="0"><div>${esc(P.client || 'Без имени')}<small>${esc(zone ? zone.name : '')} · ${esc(P.visit)} · ${fmtDate(P.date)}</small></div>${ico('edit')}</button>
-          <button class="sum-row" data-a="goStep" data-s="1"><div>${esc(recipeText() || 'Рецепт не записан')}<small>${esc([P.needle, P.voltage].filter(Boolean).join(' · ') || 'игла и вольтаж не указаны')}${P.notes ? ' · ' + esc(P.notes) : ''}</small></div>${ico('edit')}</button>
-          <button class="sum-row" data-a="goStep" data-s="2"><div>Чек ${fmt(num(P.price))}<small>Остаётся ${fmt(c.left)}${c.estimated && num(zone && zone.drops) > 0 ? ' (пигмент по оценке)' : ''}</small></div>${ico('edit')}</button></div>
-        ${!P.id ? `<div class="card toggle-row"><div><div class="item-title">Напомнить о коррекции</div><div class="small muted">Через ${esc(ruleDays(P.zoneId, 'corrDays'))} дн., карточка появится в задачах</div></div><button class="switch ${P.remind ? 'on' : ''}" data-a="togRemind" aria-label="Напомнить"></button></div>` : ''}
-        <button class="btn" data-a="pCaption">${ico('copy')}Скопировать подпись к посту</button>
-        ${P.id ? `<button class="btn danger" data-a="delProc" data-id="${esc(P.id)}">Удалить процедуру</button>` : ''}`;
-    }
-    const dots = P_STEPS.map((s, i) => `<i class="${i === pStep ? 'on' : i < pStep ? 'done' : ''}"></i>`).join('');
-    const foot = pStep === 0 ? `<button class="btn" data-a="procClose">Отмена</button><button class="btn primary" data-a="pNext">Далее ${ico('chev')}</button>`
-      : pStep === 3 ? `<button class="btn" data-a="pBack">${ico('back')}Назад</button><button class="btn primary" data-a="saveProc" data-id="${esc(P.id)}">${ico('check')}Сохранить</button>`
-        : `<button class="btn" data-a="pBack">${ico('back')}Назад</button><button class="btn primary" data-a="pNext">Далее ${ico('chev')}</button>`;
+            <input class="input" type="number" inputmode="decimal" min="0" step="any" data-pu="${esc(m.id)}" value="${esc(useMap[m.id] || '')}" placeholder="0" aria-label="Расход: ${esc(m.name)}"></div>`).join('')}</div></details>` : ''}
+      <details class="fold" data-fold="date"${dateOpen ? ' open' : ''}><summary>Дата: ${P.date === today() ? 'сегодня' : fmtDate(P.date)}</summary>
+        <div class="fold-body"><div class="field"><label for="pDate">Дата процедуры</label><input class="input" id="pDate" type="date" value="${esc(P.date)}" data-p="date"></div></div></details>
+      ${!P.id ? `<div class="card toggle-row"><div><div class="item-title">Напомнить о коррекции</div><div class="small muted">Через ${esc(ruleDays(P.zoneId, 'corrDays'))} дн., карточка появится в задачах</div></div><button class="switch ${P.remind ? 'on' : ''}" data-a="togRemind" aria-label="Напомнить"></button></div>` : ''}
+      <button class="btn" data-a="pCaption">${ico('copy')}Скопировать подпись к посту</button>
+      ${P.id ? `<button class="btn danger" data-a="delProc" data-id="${esc(P.id)}">Удалить процедуру</button>` : ''}`;
+    const foot = `<div class="foot-sum"><small>Остаётся с процедуры</small><b id="pLeft">—</b></div><button class="btn primary" data-a="saveProc" data-id="${esc(P.id)}">${ico('check')}Сохранить</button>`;
     return `<div class="sheet-head"><h2>${P.id ? 'Процедура' : 'Новая процедура'}</h2><button class="icon-btn boxed" data-a="procClose" aria-label="Закрыть">${ico('close')}</button></div>
-      <div class="steps-bar"><span class="h2">Шаг ${pStep + 1} из 4 · ${P_STEPS[pStep]}</span><div class="dots">${dots}</div></div>
       <div class="step-body">${body}</div><div class="sheet-foot">${foot}</div>`;
   }
   function updatePLive() {
     const el = $('#pLive'); if (!el) return;
+    const left = $('#pLeft');
     const zone = S.zones.find((z) => z.id === P.zoneId);
     const price = num(P.price);
-    if (!price) { el.innerHTML = '<div class="muted small">Введите сумму чека, и здесь появится, сколько остаётся с процедуры.</div>'; return; }
+    if (!price) { el.innerHTML = '<div class="muted small">Введите сумму чека, и здесь появится, сколько остаётся с процедуры.</div>'; if (left) { left.textContent = '—'; left.className = ''; } return; }
     const c = procCosts(zone, price, P.recipe, P.usage);
     const r = zone ? zoneStats(zone, price) : null;
+    if (left) { left.textContent = fmt(c.left); left.className = c.left > 0 ? 'good' : 'bad'; }
     el.innerHTML = `<div class="sum">
         <div class="row"><span class="muted">Материалы</span><span class="num">−${fmt2(c.usage)}</span></div>
         <div class="row"><span class="muted">Пигмент${c.estimated ? ' (оценка)' : ''}</span><span class="num">−${fmt2(c.pigment)}</span></div>
@@ -1624,17 +1611,11 @@
       ${zone && num(zone.hours) > 0 ? `<div class="small muted">За час работы: ${fmt(c.left / num(zone.hours))}</div>` : ''}
       ${r && r.needPrice - price > 0.5 ? `<div class="note warn">${ico('info')}<span>Ниже нужной цены: при ваших целях нужно ${fmt(Math.ceil(r.needPrice))}.</span></div>` : ''}`;
   }
-  function stepNext() {
-    if (pStep === 0) {
-      if (!String(P.client).trim()) { toast('Введите имя или пометку', 'neutral'); const i = $('#pClient'); if (i) i.focus(); return; }
-    }
-    if (pStep < 3) { pStep += 1; renderProc(); }
-  }
   function saveProc() {
     const z = S.zones.find((x) => x.id === P.zoneId);
     const client = String(P.client).trim();
     const price = num(P.price);
-    if (!client) { toast('Введите имя или пометку', 'neutral'); pStep = 0; renderProc(); return; }
+    if (!client) { toast('Введите имя или пометку', 'neutral'); const i = $('#pClient'); if (i) { i.focus(); i.scrollIntoView({ block: 'center' }); } return; }
     if (!z) { toast('Выберите услугу', 'neutral'); return; }
     const c = procCosts(z, price, P.recipe, P.usage);
     const rec = {
@@ -1906,11 +1887,14 @@
     plan: () => (S.isPro ? openSettings() : openPaywall('')),
     setPro: () => { S.isPro = true; save(); closeModal(); render(); toast('PRO включён (демо)'); },
     togglePro: () => { S.isPro = !S.isPro; save(); closeModal(); render(); },
-    wStart: (el) => { const kind = el.dataset.id; const w = $('.welcome'); if (w) w.classList.add('leaving'); setTimeout(() => { $('#welcomeRoot').innerHTML = ''; document.body.classList.remove('welcoming'); openIntake(kind); }, reduce ? 0 : 280); },
-    obGo: (el) => {
-      S.settings.masterName = val('obName').trim().slice(0, 40); S.settings.currency = val('obCur') || 'BYN';
-      if (el.dataset.id === 'sample') loadSample();
-      S.onboarded = true; save(); closeModal(true); render(true); setTimeout(maybeIntro, 600);
+    wStart: (el) => {
+      const kind = el.dataset.id; const w = $('.welcome'); if (w) w.classList.add('leaving');
+      setTimeout(() => {
+        $('#welcomeRoot').innerHTML = ''; document.body.classList.remove('welcoming');
+        if (kind === 'sample') loadSample();
+        S.onboarded = true; save(); render(true);
+        if (kind === 'sample') toast('Пример загружен. Цифры условные, замените своими.');
+      }, reduce ? 0 : 280);
     },
     sample: () => { loadSample(); S.onboarded = true; save(); render(true); toast('Пример загружен. Цифры условные, замените своими.'); },
     // услуги и материалы
@@ -2037,10 +2021,7 @@
       if (pDirty) confirmDialog('Выйти без сохранения?', 'Введённые данные пропадут.', 'Выйти', () => { P = null; pDirty = false; closeModal(); }, true);
       else { P = null; closeModal(); }
     },
-    pNext: stepNext,
-    pBack: () => { if (pStep > 0) { pStep -= 1; renderProc(); } },
-    goStep: (el) => { pStep = Number(el.dataset.s); renderProc(); },
-    pickClient: (el) => { P.client = el.dataset.n; pDirty = true; const i = $('#pClient'); if (i) i.value = P.client; },
+    pickClient: (el) => { P.client = el.dataset.n; pDirty = true; const i = $('#pClient'); if (i) i.value = P.client; updatePrev(); },
     pickZone: (el) => { P.zoneId = el.dataset.id; P.usage = null; pDirty = true; if (!P.priceTouched) P.price = (S.zones.find((z) => z.id === P.zoneId) || {}).price || ''; renderProc(); },
     pickVisit: (el) => { P.visit = el.dataset.v; pDirty = true; renderProc(); },
     compAdd: () => {
@@ -2067,13 +2048,14 @@
       pDirty = true; renderProc(); toast('Рецепт подставлен');
     },
     voice: openVoice,
+    procVoice: () => { if (!S.isPro) { toast('Диктовка доступна в PRO', 'neutral'); return; } openVoice(); },
     dictExample: () => { $('#dictText').value = 'Марина К., брови первичка, чек 250 рублей. Пигмент Шатен 4 капли плюс тёмный каштан 2 капли, игла 0.30 RLLT, вольтаж 5.4. Кожа нормальная, клиентка довольна.'; },
     dictParse: () => {
       const text = val('dictText').trim();
       if (!text) { toast('Введите или наговорите текст', 'neutral'); return; }
       const { f, found } = parseDictation(text);
       if (!found.length) { toast('Ничего не распознано. Попробуйте по-другому.', 'neutral'); return; }
-      openProc('', f, 3);
+      openProc('', f);
       pDirty = true;
       const body = $('#modalRoot .step-body');
       if (body) body.insertAdjacentHTML('afterbegin', `<div class="note">${ico('spark')}<span>Распознано: ${found.map((x) => `<span class="tag good">${esc(x)}</span>`).join(' ')}. Проверьте и сохраните.</span></div>`);
@@ -2095,7 +2077,7 @@
       const c = clientsAgg().find((x) => x.key === el.dataset.k); if (!c) return;
       const last = c.list[c.list.length - 1];
       closeModal(true);
-      openProc('', { client: c.name, zoneId: last.zoneId, visit: 'Коррекция', recipe: clone(last.recipe || []), pigment: last.recipe && last.recipe.length ? '' : (last.pigment || ''), needle: last.needle || '', voltage: last.voltage || '' }, 1);
+      openProc('', { client: c.name, zoneId: last.zoneId, visit: 'Коррекция', recipe: clone(last.recipe || []), pigment: last.recipe && last.recipe.length ? '' : (last.pigment || ''), needle: last.needle || '', voltage: last.voltage || '' });
     },
     fcopy: (el) => {
       const x = followByKey(el.dataset.k); if (!x) return;
@@ -2205,7 +2187,7 @@
     const t = e.target;
     if (t.dataset && t.dataset.pu !== undefined && P) { const zn = S.zones.find((x) => x.id === P.zoneId); if (!P.usage) P.usage = clone((zn && zn.usage) || {}); P.usage[t.dataset.pu] = t.value; pDirty = true; updatePLive(); return; }
     if (t.dataset && t.dataset.rname !== undefined && P) { const r = P.recipe[Number(t.dataset.rname)]; if (r) { r.name = t.value; pDirty = true; } return; }
-    if (t.dataset && t.dataset.p && P) { P[t.dataset.p] = t.value; pDirty = true; if (t.dataset.p === 'price') { P.priceTouched = true; updatePLive(); } return; }
+    if (t.dataset && t.dataset.p && P) { P[t.dataset.p] = t.value; pDirty = true; if (t.dataset.p === 'price') { P.priceTouched = true; updatePLive(); } if (t.dataset.p === 'client') updatePrev(); return; }
     const k = t.dataset && t.dataset.in;
     if (!k) return;
     if (k === 'plan') {
@@ -2253,6 +2235,7 @@
     if (e.key === 'Enter' && e.target.id === 'quickTask') { e.preventDefault(); actions.quickadd(); }
     if (e.key === 'Enter' && e.target.id === 'chkNew') { e.preventDefault(); actions.chkAdd(); }
   });
+  document.addEventListener('toggle', (e) => { const d = e.target; if (P && d.dataset && d.dataset.fold) pOpen[d.dataset.fold] = d.open; }, true);
   window.addEventListener('scroll', () => { document.body.classList.toggle('scrolled', window.scrollY > 40); }, { passive: true });
 
   window.__pmu = { parseDictation, zoneStats, procCosts, insights, monthData, byZone, followups, dropCost, avgDropCost, S }; // для проверки в консоли

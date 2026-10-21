@@ -1,5 +1,5 @@
 // Кэш для работы без сети. При выходе новой версии поменяйте VERSION.
-const VERSION = 'kabinet-v6';
+const VERSION = 'kabinet-v7';
 const FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
