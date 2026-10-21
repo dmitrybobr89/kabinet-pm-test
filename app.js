@@ -4,11 +4,11 @@
    Серверов и ИИ нет: «диктовка» разбирает текст правилами прямо на телефоне. */
 (() => {
   const KEY = 'pmu_cabinet_v1';
-  const VERSION_LABEL = 'Кабинет мастера, прототип 0.6';
+  const VERSION_LABEL = 'Кабинет мастера, прототип 0.7';
 
   // Что бесплатно, а что нет. Меняется в одном месте.
   const PLAN = {
-    freeProcedureLimit: 10, // процедур бесплатно (0 = только в PRO)
+    freeProcedureLimit: 100000, // процедур бесплатно (0 = только в PRO). На время теста лимит снят; для боевой версии вернуть 10 или другую цифру
     freeTaskLimit: 30,      // активных задач бесплатно
   };
 
@@ -943,7 +943,7 @@
     const all = clientsAgg();
     const dueN = new Set(dueList().map((x) => clientKey(x.p.client))).size;
     const newN = all.filter((c) => daysBetween(c.first, today()) <= 30).length;
-    const limitLine = !S.isPro ? `<div class="tiny muted">${S.procedures.length} из ${PLAN.freeProcedureLimit} бесплатных процедур</div>` : '';
+    const limitLine = !S.isPro && PLAN.freeProcedureLimit < 1000 ? `<div class="tiny muted">${S.procedures.length} из ${PLAN.freeProcedureLimit} бесплатных процедур</div>` : '';
     const msgN = followups().length;
     return `<button class="card tap menu-row" data-a="go" data-page="clients" data-sub="msgs"><div class="ic violet">${ico('msg')}</div><div><div class="item-title">Сообщения клиентам</div><div class="small muted">${msgN ? 'Пора написать: ' + msgN : 'Напоминания, шаблоны, подписи к постам'}</div></div>${ico('chev')}</button>
       <div class="grid2" style="grid-template-columns:repeat(3,1fr)">
@@ -1673,7 +1673,7 @@
     modal(`${head('PRO')}
       ${reason ? `<div class="note">${ico('info')}<span>${esc(reason)}</span></div>` : ''}
       <div class="stack"><div class="card"><b>В PRO</b><ul style="margin:8px 0 0;padding-left:18px;line-height:1.7">
-        <li>Безлимитная история клиентов и рецептов</li><li>Диктовка процедуры голосом</li><li>Задачи без ограничений</li><li>Все видеоуроки, памятки и таблицы</li></ul></div>
+        ${PLAN.freeProcedureLimit < 1000 ? '<li>Безлимитная история клиентов и рецептов</li>' : ''}<li>Диктовка процедуры голосом</li><li>Задачи без ограничений</li><li>Все видеоуроки, памятки и таблицы</li></ul></div>
         <p class="small muted">Оплата в тестовой версии не подключена. Кнопка ниже включает PRO для проверки.</p></div>
       <button class="btn primary" data-a="setPro">Включить PRO (демо)</button>
       <button class="btn" data-a="close">Позже</button>`);
